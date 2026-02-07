@@ -55,7 +55,7 @@ pub fn init(container: &gtk4::Box, interface: &str) {
                     }
                 }
             }
-            std::thread::sleep(Duration::from_secs(1));
+            std::thread::sleep(Duration::from_secs(2));
         }
     });
 }

@@ -9,13 +9,13 @@ pub fn init(container: &gtk4::Box) {
         .build();
     container.append(&label);
 
-    let mut sys = System::new_all();
+    let mut sys = System::new();
     let mut components = Components::new();
 
-    glib::timeout_add_local(Duration::from_secs(1), move || {
+    glib::timeout_add_local(Duration::from_secs(2), move || {
         sys.refresh_cpu_usage();
-        sys.refresh_all();
-        components.refresh(true);
+        sys.refresh_cpu_specifics(sysinfo::CpuRefreshKind::nothing().with_frequency());
+        components.refresh(false);
 
         // CPU Frequency (max)
         let max_freq = sys.cpus().iter()

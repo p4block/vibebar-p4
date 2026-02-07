@@ -9,9 +9,9 @@ pub fn init(container: &gtk4::Box) {
         .build();
     container.append(&label);
 
-    let mut sys = System::new_all();
+    let mut sys = System::new();
 
-    glib::timeout_add_local(Duration::from_secs(2), move || {
+    glib::timeout_add_local(Duration::from_secs(5), move || {
         sys.refresh_memory();
         let used = sys.used_memory();
         let total = sys.total_memory();

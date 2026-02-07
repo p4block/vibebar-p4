@@ -28,7 +28,7 @@ pub fn init(container: &gtk4::Box) {
                 let icon = if muted { "" } else { "" };
                 let _ = tx.send(format!("{}   {}%", icon, perc));
             }
-            std::thread::sleep(Duration::from_millis(500));
+            std::thread::sleep(Duration::from_secs(1));
         }
     });
 }

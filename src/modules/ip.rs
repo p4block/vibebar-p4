@@ -46,14 +46,11 @@ pub fn init(container: &gtk4::Box) {
                 ips.join(", ")
             };
 
-            // Initial set
-            let ips = fetch_ips(handle.clone()).await;
-            let _ = tx.send(ips);
-
-            // Listen for changes
-            while let Some((_msg, _)) = messages.next().await {
+            // Initial set and periodic poll
+            loop {
                 let ips = fetch_ips(handle.clone()).await;
                 let _ = tx.send(ips);
+                tokio::time::sleep(Duration::from_secs(30)).await;
             }
         });
     });
