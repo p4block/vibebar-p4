@@ -62,3 +62,6 @@ bar {
 # Or simply run it as an exec:
 exec vibebar-p4
 ```
+
+## License
+This project is licensed under the **WTFPL (Do What The Fuck You Want To Public License)** - see the [LICENSE](LICENSE) file for details.
