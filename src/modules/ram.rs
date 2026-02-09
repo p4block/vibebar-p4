@@ -5,7 +5,7 @@ use sysinfo::System;
 
 pub fn init(container: &gtk4::Box) {
     let label = Label::builder()
-        .label(" ...%")
+        .label("  ...%")
         .build();
     container.append(&label);
 
@@ -17,7 +17,7 @@ pub fn init(container: &gtk4::Box) {
         let total = sys.total_memory();
         let perc = if total > 0 { (used as f64 / total as f64) * 100.0 } else { 0.0 };
         
-        label.set_label(&format!(" {:.0}%", perc));
+        label.set_label(&format!("  {:.0}%", perc));
         glib::ControlFlow::Continue
     });
 }

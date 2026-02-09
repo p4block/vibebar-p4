@@ -2,25 +2,36 @@
     border: none;
     border-radius: 0;
     font-family: "Terminess Nerd Font", "Font Awesome 6 Free Solid", "Font Awesome 6 Brands";
-    font-size: 12px;
+    font-size: 16px;
 }
 
 window {
-    background-color: rgba(0, 0, 0, 0.82);
+    background-color: transparent;
     color: white;
 }
 
 #main-container {
-    background-color: transparent;
-    margin: 0 1280px;
+    background-color: rgba(0, 0, 0, 0.7);
     border-radius: 0;
     padding: 0;
-    min-height: 24px;
+    min-height: 32px;
 }
 
 label {
     padding: 0 10px;
     font-family: "Terminess Nerd Font", monospace;
+}
+
+#popover-label {
+    font-size: 13px;
+    padding: 10px;
+    font-family: "Terminess Nerd Font", monospace;
+}
+
+popover contents {
+    background-color: rgba(0, 0, 0, 0.7);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 button {
@@ -30,20 +41,63 @@ button {
 
 #workspaces button {
     min-width: 40px;
-    padding: 0 6px;
+    min-height: 32px;
+    padding: 0;
+    font-family: "Noto";
+    font-size: 16px;
+}
+
+#workspaces label {
+    /*padding: 0;*/
+    font-size: 16px;
+    margin-left: -8px;
 }
 
 button:hover {
     background: rgba(255, 255, 255, 0.82);
     color: rgba(0, 0, 0, 0.9);
+    transition-duration: 0.3s;
 }
 
 #workspaces button.focused,
 #workspaces button.active {
     background-color: #ffffff;
     color: rgba(0, 0, 0, 0.9);
+    transition-duration: 0.3s;
 }
 
 #workspaces button.urgent {
     background-color: #eb4d4b;
+}
+
+#battery-module {
+    padding: 0 10px;
+}
+
+#battery-module.charging {
+    animation-name: battery_charge_blink;
+    animation-duration: 1.0s;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+    animation-direction: alternate;
+}
+
+#battery-module.critical:not(.charging) {
+    animation-name: battery_discharge_blink;
+    animation-duration: 0.2s;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+    animation-direction: alternate;
+}
+
+@keyframes battery_charge_blink {
+    to {
+        color: #02f100;
+    }
+}
+
+@keyframes battery_discharge_blink {
+    to {
+        color: #fb4934;
+    }
 }

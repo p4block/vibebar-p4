@@ -14,7 +14,7 @@ fn format_bandwidth(kb: u64) -> String {
 
 pub fn init(container: &gtk4::Box, interface: &str) {
     let label = Label::builder()
-        .label(" ...")
+        .label("  ...")
         .build();
     label.add_css_class("network-module");
     container.append(&label);
@@ -46,7 +46,7 @@ pub fn init(container: &gtk4::Box, interface: &str) {
                                 let tx_kb = (curr_tx - prev_tx) / 1024;
                                 let rx_str = format_bandwidth(rx_kb);
                                 let tx_str = format_bandwidth(tx_kb);
-                                let _ = tx.send(format!(" {} {}", rx_str, tx_str));
+                                let _ = tx.send(format!("   {}  {}", rx_str, tx_str));
                             }
                             
                             prev_rx = curr_rx;

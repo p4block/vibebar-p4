@@ -1,13 +1,26 @@
 use gtk4::prelude::*;
-use gtk4::Label;
+use gtk4::{Button, Label};
+use std::process::Command;
 use std::time::Duration;
 use sysinfo::{System, Components};
 
 pub fn init(container: &gtk4::Box) {
-    let label = Label::builder()
-        .label(" ...")
+    let btn = Button::builder()
         .build();
-    container.append(&label);
+    btn.set_widget_name("cpu-btn");
+    container.append(&btn);
+
+    let label = Label::builder()
+        .label("  ...")
+        .build();
+    btn.set_child(Some(&label));
+
+    btn.connect_clicked(|_| {
+        let _ = Command::new("footclient")
+            .arg("-e")
+            .arg("btop")
+            .spawn();
+    });
 
     let mut sys = System::new();
     let mut components = Components::new();
@@ -48,7 +61,7 @@ pub fn init(container: &gtk4::Box) {
             }
         }).collect();
 
-        label.set_label(&format!(" {} {:.1}GHz {:.0}°C", bars, ghz, temp));
+        label.set_label(&format!("  {:.1}GHz {:.0}°C {}", ghz, temp, bars));
         glib::ControlFlow::Continue
     });
 }

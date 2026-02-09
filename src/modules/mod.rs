@@ -8,3 +8,7 @@ pub mod mpris;
 pub mod volume;
 pub mod network;
 pub mod tray;
+pub mod battery;
+pub mod brightness;
+pub mod power_profiles;
+pub mod weather;

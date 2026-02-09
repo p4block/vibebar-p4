@@ -3,11 +3,31 @@ use gtk4::Label;
 use std::time::Duration;
 use tokio::process::Command;
 
-pub fn init(container: &gtk4::Box, command: &str, interval_secs: u64, prefix: &str) {
+pub fn init(container: &gtk4::Box, command: &str, interval_secs: u64, prefix: &str, click_command: Option<&str>) {
     let label = Label::builder()
         .label(&format!("{} ...", prefix))
         .build();
-    container.append(&label);
+    
+    let click_cmd_own = click_command.map(|s| s.to_string());
+    
+    if let Some(cmd) = click_cmd_own {
+        let btn = gtk4::Button::builder()
+            .child(&label)
+            .build();
+        btn.set_widget_name("script-btn");
+        btn.connect_clicked(move |_| {
+            let _ = std::process::Command::new("sh")
+                .arg("-c")
+                .arg(&cmd)
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn();
+        });
+        container.append(&btn);
+    } else {
+        container.append(&label);
+    }
 
     let cmd_own = command.to_string();
     let prefix_own = prefix.to_string();

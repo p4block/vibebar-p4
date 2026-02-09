@@ -1,20 +1,29 @@
 use gtk4::prelude::*;
-use gtk4::Label;
+use gtk4::Button;
 use pulsectl::controllers::SinkController;
 use pulsectl::controllers::DeviceControl;
 use std::time::Duration;
 
 pub fn init(container: &gtk4::Box) {
-    let label = Label::builder()
+    let btn = Button::builder()
         .label(" ...%")
         .build();
-    container.append(&label);
+    btn.set_widget_name("volume-btn");
+    container.append(&btn);
+
+    btn.connect_clicked(|_| {
+        let _ = std::process::Command::new("pactl")
+            .arg("set-sink-mute")
+            .arg("@DEFAULT_SINK@")
+            .arg("toggle")
+            .spawn();
+    });
 
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
-    let l = label.clone();
+    let b = btn.clone();
     gtk4::glib::MainContext::default().spawn_local(async move {
         while let Some(vol) = rx.recv().await {
-            l.set_label(&vol);
+            b.set_label(&vol);
         }
     });
 
@@ -26,7 +35,7 @@ pub fn init(container: &gtk4::Box) {
                 let perc = (vol_val as f64 / 65536.0 * 100.0) as i32;
                 let muted = default_sink.mute;
                 let icon = if muted { "" } else { "" };
-                let _ = tx.send(format!("{}   {}%", icon, perc));
+                let _ = tx.send(format!("{}  {}%", icon, perc));
             }
             std::thread::sleep(Duration::from_secs(1));
         }

@@ -1,19 +1,26 @@
 use gtk4::prelude::*;
-use gtk4::Label;
+use gtk4::Button;
 use mpris::PlayerFinder;
 use std::time::Duration;
 
 pub fn init(container: &gtk4::Box) {
-    let label = Label::builder()
+    let btn = Button::builder()
         .label("")
         .build();
-    container.append(&label);
+    btn.set_widget_name("mpris-btn");
+    container.append(&btn);
+
+    btn.connect_clicked(|_| {
+        let _ = std::process::Command::new("playerctl")
+            .arg("play-pause")
+            .spawn();
+    });
 
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
-    let l = label.clone();
+    let b = btn.clone();
     gtk4::glib::MainContext::default().spawn_local(async move {
         while let Some(txt) = rx.recv().await {
-            l.set_label(&txt);
+            b.set_label(&txt);
         }
     });
 
@@ -30,7 +37,7 @@ pub fn init(container: &gtk4::Box) {
                         mpris::PlaybackStatus::Paused => "",
                         _ => "⏹",
                     };
-                    let _ = tx.send(format!("{} {} - {}", icon, artist, title));
+                    let _ = tx.send(format!("{}  {} - {}", icon, artist, title));
                 } else {
                     let _ = tx.send("".to_string());
                 }
