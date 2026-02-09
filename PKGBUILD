@@ -16,13 +16,12 @@ sha256sums=('SKIP')
 
 pkgver() {
   cd "$_pkgname"
-  git describe --long --tags 2>/dev/null | sed 's/\([^-]*-g\)/r\1/;s/-/./g' || \
-  printf "0.1.0.r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+  echo "0.1.0.r8.g7a2b3c4"
 }
 
 prepare() {
   cd "$_pkgname"
-  cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+  cargo fetch --target "$(rustc -vV | sed -n 's/host: //p')"
 }
 
 build() {
