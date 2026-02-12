@@ -4,7 +4,6 @@ pub mod disk;
 pub mod ram;
 pub mod cpu;
 pub mod scripts;
-pub mod mpris;
 pub mod volume;
 pub mod network;
 pub mod tray;

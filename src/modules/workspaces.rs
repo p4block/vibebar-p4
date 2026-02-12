@@ -3,7 +3,7 @@ use gtk4::{Button, Box, Orientation};
 use tokio::runtime::Runtime;
 use futures::StreamExt;
 
-pub fn init(container: &gtk4::Box) {
+pub fn init(container: &gtk4::Box, monitor_name: Option<String>) {
     let workspaces_box = Box::new(Orientation::Horizontal, 0);
     workspaces_box.set_widget_name("workspaces");
     container.append(&workspaces_box);
@@ -39,6 +39,13 @@ pub fn init(container: &gtk4::Box) {
                     match event {
                         niri_ipc::Event::WorkspacesChanged { workspaces } => {
                             let ws_data: Vec<(String, bool)> = workspaces.into_iter()
+                                .filter(|w| {
+                                    if let Some(ref m) = monitor_name {
+                                        w.output.as_ref() == Some(m)
+                                    } else {
+                                        true
+                                    }
+                                })
                                 .map(|w| (w.name.unwrap_or_else(|| w.id.to_string()), w.is_active))
                                 .collect();
                             let _ = tx.send(ws_data);
@@ -65,14 +72,32 @@ pub fn init(container: &gtk4::Box) {
 
                     // Initial fetch
                     if let Ok(ws) = sway_for_queries.get_workspaces().await {
-                        let ws_data = ws.into_iter().map(|w| (w.name, w.focused)).collect();
+                        let ws_data = ws.into_iter()
+                            .filter(|w| {
+                                if let Some(ref m) = monitor_name {
+                                    w.output == *m
+                                } else {
+                                    true
+                                }
+                            })
+                            .map(|w| (w.name, w.focused))
+                            .collect();
                         let _ = tx.send(ws_data);
                     }
 
                     while let Some(Ok(event)) = events.next().await {
                        if let swayipc_async::Event::Workspace(_) = event {
                            if let Ok(ws) = sway_for_queries.get_workspaces().await {
-                               let ws_data = ws.into_iter().map(|w| (w.name, w.focused)).collect();
+                               let ws_data = ws.into_iter()
+                                   .filter(|w| {
+                                        if let Some(ref m) = monitor_name {
+                                            w.output == *m
+                                        } else {
+                                            true
+                                        }
+                                   })
+                                   .map(|w| (w.name, w.focused))
+                                   .collect();
                                let _ = tx.send(ws_data);
                            }
                        }

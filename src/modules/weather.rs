@@ -61,6 +61,14 @@ pub fn init(container: &gtk4::Box) {
     });
     label.add_controller(motion_controller);
 
+    let (refresh_tx, refresh_rx) = std::sync::mpsc::channel::<()>();
+    let click_gesture = gtk4::GestureClick::new();
+    click_gesture.set_button(0); // All buttons
+    click_gesture.connect_pressed(move |_, _, _, _| {
+        let _ = refresh_tx.send(());
+    });
+    label.add_controller(click_gesture);
+
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<WeatherUpdate>();
     
     let l = label.clone();
@@ -78,7 +86,10 @@ pub fn init(container: &gtk4::Box) {
             if let Ok(u) = update {
                 let _ = tx.send(u);
             }
-            std::thread::sleep(Duration::from_secs(900)); // 15 mins
+            // Wait for 15 mins OR refresh signal
+            // recv_timeout returns Err(Timeout) if timeout expires, looking like a fresh start
+            // or Ok(_) on manual refresh, also triggering a fresh loop
+            let _ = refresh_rx.recv_timeout(Duration::from_secs(900));
         }
     });
 }

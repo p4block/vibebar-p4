@@ -1,98 +1,464 @@
 use gtk4::prelude::*;
-use gtk4::{Box, Orientation, Image, Button};
-use system_tray::client::Client;
+use gtk4::{Box, Orientation, Image, Button, GestureClick, Popover};
+use system_tray::client::{Client, ActivateRequest, UpdateEvent};
+use system_tray::menu::TrayMenu;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use tokio::sync::{mpsc, broadcast};
 
-pub fn init(container: &gtk4::Box) {
+#[derive(Clone, Debug)]
+pub struct TrayItemInfo {
+    pub icon_name: Option<String>,
+    pub icon_theme_path: Option<String>,
+    pub icon_pixmap: Option<Vec<system_tray::item::IconPixmap>>,
+    pub status: system_tray::item::Status,
+}
+
+enum TrayAction {
+    Activate { id: String, x: i32, y: i32 },
+    MenuAction { id: String, menu_path: String, item_id: i32 },
+}
+
+struct MenuState {
+    menu_path: String,
+    menu: Option<TrayMenu>,
+}
+
+pub struct TrayBackend {
+    _client: Arc<Client>,
+    tx_activate: mpsc::UnboundedSender<TrayAction>,
+    titems: Arc<Mutex<HashMap<String, TrayItemInfo>>>,
+    tmenus: Arc<Mutex<HashMap<String, MenuState>>>,
+    tx_ui: broadcast::Sender<(String, Option<TrayItemInfo>)>,
+}
+
+impl TrayBackend {
+    pub async fn new() -> Option<Arc<Self>> {
+        let client = Client::new().await.ok()?;
+        let mut stream = client.subscribe();
+        let client = Arc::new(client);
+        let (tx_activate, mut rx_activate) = mpsc::unbounded_channel::<TrayAction>();
+        let (tx_ui, _) = broadcast::channel(128);
+        
+        let titems = Arc::new(Mutex::new(HashMap::new()));
+        let tmenus = Arc::new(Mutex::new(HashMap::new()));
+        {
+            let client_items = client.items();
+            let lock = client_items.lock().unwrap();
+            let mut items = titems.lock().unwrap();
+            let mut menus = tmenus.lock().unwrap();
+            for (id, (item, menu)) in lock.iter() {
+                let info = TrayItemInfo {
+                    icon_name: item.icon_name.clone(),
+                    icon_theme_path: item.icon_theme_path.clone(),
+                    icon_pixmap: item.icon_pixmap.clone(),
+                    status: item.status,
+                };
+                items.insert(id.clone(), info);
+                if let Some(menu_path) = &item.menu {
+                    menus.insert(id.clone(), MenuState { menu_path: menu_path.clone(), menu: menu.clone() });
+                }
+            }
+        }
+        
+        let titems_thread = titems.clone();
+        let tmenus_thread = tmenus.clone();
+        let tx_ui_thread = tx_ui.clone();
+        let client_act = client.clone();
+        
+        tokio::spawn(async move {
+            tokio::spawn(async move {
+                while let Some(action) = rx_activate.recv().await {
+                    match action {
+                        TrayAction::Activate { id, x, y } => {
+                            let _ = client_act.activate(ActivateRequest::Default { address: id, x, y }).await;
+                        }
+                        TrayAction::MenuAction { id, menu_path, item_id } => {
+                            let _ = client_act.activate(ActivateRequest::MenuItem {
+                                address: id,
+                                menu_path,
+                                submenu_id: item_id,
+                            }).await;
+                        }
+                    }
+                }
+            });
+
+            while let Ok(event) = stream.recv().await {
+                match event {
+                        system_tray::client::Event::Add(id, item) => {
+                            let info = TrayItemInfo {
+                                icon_name: item.icon_name.clone(),
+                                icon_theme_path: item.icon_theme_path.clone(),
+                                icon_pixmap: item.icon_pixmap.clone(),
+                                status: item.status,
+                            };
+                            {
+                                let mut items = titems_thread.lock().unwrap();
+                                items.insert(id.clone(), info.clone());
+                            }
+                            if let Some(menu_path) = item.menu {
+                                let mut m = tmenus_thread.lock().unwrap();
+                                m.insert(id.clone(), MenuState { menu_path, menu: None });
+                            }
+                            let _ = tx_ui_thread.send((id, Some(info)));
+                        }
+                        system_tray::client::Event::Update(id, update) => {
+                            match update {
+                                UpdateEvent::Status(status) => {
+                                    let mut items = titems_thread.lock().unwrap();
+                                    if let Some(info) = items.get_mut(&id) {
+                                        info.status = status;
+                                        let info_clone = info.clone();
+                                        drop(items);
+                                        let _ = tx_ui_thread.send((id, Some(info_clone)));
+                                    }
+                                }
+                                UpdateEvent::Icon { icon_name, icon_pixmap, .. } => {
+                                    let mut items = titems_thread.lock().unwrap();
+                                    if let Some(info) = items.get_mut(&id) {
+                                        if let Some(name) = icon_name { info.icon_name = Some(name); }
+                                        if let Some(pix) = icon_pixmap { info.icon_pixmap = Some(pix); }
+                                        let info_clone = info.clone();
+                                        drop(items);
+                                        let _ = tx_ui_thread.send((id, Some(info_clone)));
+                                    }
+                                }
+                                UpdateEvent::Menu(menu) => {
+                                    let mut m = tmenus_thread.lock().unwrap();
+                                    if let Some(ms) = m.get_mut(&id) {
+                                        ms.menu = Some(menu);
+                                    }
+                                }
+                                UpdateEvent::MenuConnect(menu_path) => {
+                                    let mut m = tmenus_thread.lock().unwrap();
+                                    if let Some(ms) = m.get_mut(&id) {
+                                        ms.menu_path = menu_path;
+                                    } else {
+                                        m.insert(id, MenuState { menu_path, menu: None });
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                        system_tray::client::Event::Remove(id) => {
+                            {
+                                let mut items = titems_thread.lock().unwrap();
+                                items.remove(&id);
+                            }
+                            {
+                                let mut m = tmenus_thread.lock().unwrap();
+                                m.remove(&id);
+                            }
+                            let _ = tx_ui_thread.send((id, None));
+                        }
+                }
+            }
+        });
+
+        Some(Arc::new(Self {
+            _client: client,
+            tx_activate,
+            titems,
+            tmenus,
+            tx_ui,
+        }))
+    }
+}
+
+pub fn init(container: &gtk4::Box, backend: Arc<TrayBackend>) {
     let tray_box = Box::new(Orientation::Horizontal, 0);
     tray_box.set_widget_name("tray");
     container.append(&tray_box);
 
-    let items: Arc<Mutex<HashMap<String, gtk4::Widget>>> = Arc::new(Mutex::new(HashMap::new()));
-
-    let (tx_ui, mut rx_ui) = tokio::sync::mpsc::unbounded_channel::<(String, Option<String>)>();
-    let (tx_activate, mut rx_activate) = tokio::sync::mpsc::unbounded_channel::<String>();
-
+    let gui_items: Arc<Mutex<HashMap<String, gtk4::Widget>>> = Arc::new(Mutex::new(HashMap::new()));
+    
     let tbox = tray_box.clone();
-    let titems = items.clone();
-    let tx_act = tx_activate.clone();
+    let tgui_items = gui_items.clone();
+    let backend_ui = backend.clone();
+    
+    // Subscribe BEFORE initial sync to avoid missing anything
+    let mut rx_ui_global = backend.tx_ui.subscribe();
+
     gtk4::glib::MainContext::default().spawn_local(async move {
-        while let Some((id, icon_name)) = rx_ui.recv().await {
-            let mut map = titems.lock().unwrap();
-            if let Some(name) = icon_name {
-                if !map.contains_key(&id) {
-                    let img = Image::builder()
-                        .icon_name(&name)
-                        .pixel_size(18)
-                        .build();
-                    img.set_css_classes(&["tray-icon"]);
-                    
-                    let btn = Button::builder()
-                        .child(&img)
-                        .build();
+        // 1. Initial Sync
+        {
+            let items = backend_ui.titems.lock().unwrap();
+            let mut map = tgui_items.lock().unwrap();
+            for (id, info) in items.iter() {
+                if !map.contains_key(id) {
+                    let btn = Button::builder().build();
                     btn.set_widget_name("tray-btn");
+                    btn.set_hexpand(false);
+                    btn.set_vexpand(false);
                     
-                    let id_clone = id.clone();
-                    let tx_active_clone = tx_act.clone();
-                    btn.connect_clicked(move |_| {
-                        let _ = tx_active_clone.send(id_clone.clone());
-                    });
+                    let is_visible = matches!(info.status, system_tray::item::Status::Active | system_tray::item::Status::NeedsAttention) 
+                        && (info.icon_name.is_some() || info.icon_pixmap.is_some());
+                    btn.set_visible(is_visible);
+                    
+                    update_icon(&btn, info);
+                    
+                    setup_button_signals(&btn, id, &backend_ui);
 
                     tbox.append(&btn);
-                    map.insert(id, btn.upcast());
-                } else if let Some(widget) = map.get(&id) {
-                    if let Some(btn) = widget.downcast_ref::<Button>() {
-                        if let Some(img) = btn.child().and_then(|c| c.downcast::<Image>().ok()) {
-                            img.set_icon_name(Some(&name));
-                        }
-                    }
-                }
-            } else {
-                if let Some(widget) = map.remove(&id) {
-                    tbox.remove(&widget);
+                    map.insert(id.clone(), btn.upcast());
                 }
             }
         }
-    });
 
-    std::thread::spawn(move || {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(async move {
-            if let Ok(client) = Client::new().await {
-                let client = Arc::new(client);
-                let mut stream = client.subscribe();
-                
-                let client_activate = client.clone();
-                tokio::spawn(async move {
-                    while let Some(id) = rx_activate.recv().await {
-                        let _ = client_activate.activate(system_tray::client::ActivateRequest::Default {
-                            address: id,
-                            x: 0,
-                            y: 0,
-                        }).await;
-                    }
-                });
+        // 2. Global Event Loop
+        loop {
+            let res = rx_ui_global.recv().await;
+            match res {
+                Ok((id, info_opt)) => {
+                    let mut map = tgui_items.lock().unwrap();
+                    if let Some(info) = info_opt {
+                        let is_visible = matches!(info.status, system_tray::item::Status::Active | system_tray::item::Status::NeedsAttention) 
+                            && (info.icon_name.is_some() || info.icon_pixmap.is_some());
 
-                while let Ok(event) = stream.recv().await {
-                    match event {
-                        system_tray::client::Event::Add(id, item) => {
-                            let icon = item.icon_name.clone().unwrap_or_else(|| "image-missing".to_string());
-                            let _ = tx_ui.send((id, Some(icon)));
-                        }
-                        system_tray::client::Event::Update(id, update) => {
-                            if let system_tray::client::UpdateEvent::Icon { icon_name, .. } = update {
-                                if let Some(name) = icon_name {
-                                    let _ = tx_ui.send((id, Some(name)));
-                                }
+                        if !map.contains_key(&id) {
+                            let btn = Button::builder().build();
+                            btn.set_widget_name("tray-btn");
+                            btn.set_hexpand(false);
+                            btn.set_vexpand(false);
+                            btn.set_visible(is_visible);
+                            update_icon(&btn, &info);
+                            
+                            setup_button_signals(&btn, &id, &backend_ui);
+
+                            tbox.append(&btn);
+                            map.insert(id, btn.upcast());
+                        } else if let Some(widget) = map.get(&id) {
+                            if let Some(btn) = widget.downcast_ref::<Button>() {
+                                btn.set_visible(is_visible);
+                                update_icon(btn, &info);
                             }
                         }
-                        system_tray::client::Event::Remove(id) => {
-                            let _ = tx_ui.send((id, None));
+                    } else {
+                        if let Some(widget) = map.remove(&id) {
+                            tbox.remove(&widget);
                         }
                     }
                 }
+                Err(broadcast::error::RecvError::Lagged(_)) => {
+                    // Reconciliation: Sync entire state
+                    let items = backend_ui.titems.lock().unwrap();
+                    let mut map = tgui_items.lock().unwrap();
+                    
+                    // 1. Remove widgets that are no longer in backend
+                    let to_remove: Vec<String> = map.keys()
+                        .filter(|id| !items.contains_key(*id))
+                        .cloned()
+                        .collect();
+                    for id in to_remove {
+                        if let Some(widget) = map.remove(&id) {
+                            tbox.remove(&widget);
+                        }
+                    }
+
+                    // 2. Update/Add widgets that are in backend
+                    for (id, info) in items.iter() {
+                        let is_visible = matches!(info.status, system_tray::item::Status::Active | system_tray::item::Status::NeedsAttention) 
+                            && (info.icon_name.is_some() || info.icon_pixmap.is_some());
+
+                        if let Some(widget) = map.get(id) {
+                            if let Some(btn) = widget.downcast_ref::<Button>() {
+                                btn.set_visible(is_visible);
+                                update_icon(btn, info);
+                            }
+                        } else {
+                            let btn = Button::builder().build();
+                            btn.set_widget_name("tray-btn");
+                            btn.set_hexpand(false);
+                            btn.set_vexpand(false);
+                            btn.set_visible(is_visible);
+                            update_icon(&btn, info);
+                            
+                            setup_button_signals(&btn, id, &backend_ui);
+                            
+                            tbox.append(&btn);
+                            map.insert(id.clone(), btn.upcast());
+                        }
+                    }
+                }
+                Err(broadcast::error::RecvError::Closed) => break,
             }
-        });
+        }
     });
+}
+
+fn setup_button_signals(btn: &Button, id: &str, backend: &Arc<TrayBackend>) {
+    let id_clone = id.to_string();
+    let tx_act = backend.tx_activate.clone();
+    let btn_left = btn.clone();
+    
+    btn.connect_clicked(move |_| {
+        let mut x_abs = 0;
+        let mut y_abs = 0;
+        if let Some(window) = btn_left.root().and_then(|r| r.downcast::<gtk4::Window>().ok()) {
+            let (x, y) = btn_left.translate_coordinates(&window, 0.0, 0.0).unwrap_or((0.0, 0.0));
+            if let Some(monitor) = gtk4::prelude::WidgetExt::display(&window).monitor_at_surface(&window.surface().unwrap()) {
+                let geom = monitor.geometry();
+                x_abs = geom.x() + x as i32;
+                y_abs = geom.y() + (geom.height() - 800) + y as i32;
+            }
+        }
+        let _ = tx_act.send(TrayAction::Activate { id: id_clone.clone(), x: x_abs, y: y_abs });
+    });
+
+    let gesture = GestureClick::new();
+    gesture.set_button(3);
+    let id_right = id.to_string();
+    let tx_act_right = backend.tx_activate.clone();
+    let btn_right = btn.clone();
+    let backend_right = backend.clone();
+    gesture.connect_pressed(move |_, _, _, _| {
+        let menu_opt = {
+            let m = backend_right.tmenus.lock().unwrap();
+            m.get(&id_right).and_then(|ms| ms.menu.clone().map(|menu| (ms.menu_path.clone(), menu)))
+        };
+
+        if let Some((menu_path, menu)) = menu_opt {
+            let popover = Popover::builder()
+                .position(gtk4::PositionType::Top)
+                .autohide(true)
+                .has_arrow(true)
+                .build();
+            popover.set_parent(&btn_right);
+            
+            let vbox = create_menu_vbox(menu.submenus, id_right.clone(), menu_path, tx_act_right.clone(), Some(popover.clone()));
+            popover.set_child(Some(&vbox));
+            popover.popup();
+        }
+    });
+    btn.add_controller(gesture);
+}
+
+fn update_icon(btn: &Button, info: &TrayItemInfo) {
+    if let Some(name) = &info.icon_name {
+        let theme = gtk4::IconTheme::for_display(&gtk4::gdk::Display::default().unwrap());
+        if let Some(path) = &info.icon_theme_path {
+            let paths = theme.search_path();
+            if !paths.iter().any(|p| p.to_str() == Some(path)) {
+                theme.add_search_path(path);
+            }
+        }
+
+        let img = Image::builder()
+            .icon_name(name)
+            .pixel_size(18)
+            .build();
+        img.set_css_classes(&["tray-icon"]);
+        btn.set_child(Some(&img));
+    } else if let Some(pixmaps) = &info.icon_pixmap {
+        if let Some(pixmap) = pixmaps.iter().max_by_key(|p| p.width) {
+            // Reorder ARGB (Network byte order) to RGBA (GTK expected)
+            let mut rgba_pixels = Vec::with_capacity(pixmap.pixels.len());
+            for chunk in pixmap.pixels.chunks_exact(4) {
+                // Network order is usually ARGB or BGRA depending on implementation
+                // StatusNotifierItem spec says ARGB32
+                // chunk[0]=A, chunk[1]=R, chunk[2]=G, chunk[3]=B
+                // We want: R=chunk[1], G=chunk[2], B=chunk[3], A=chunk[0]
+                rgba_pixels.push(chunk[1]);
+                rgba_pixels.push(chunk[2]);
+                rgba_pixels.push(chunk[3]);
+                rgba_pixels.push(chunk[0]);
+            }
+
+            let bytes = gtk4::glib::Bytes::from(&rgba_pixels);
+            let pixbuf = gdk4::gdk_pixbuf::Pixbuf::from_bytes(
+                &bytes,
+                gdk4::gdk_pixbuf::Colorspace::Rgb,
+                true,
+                8,
+                pixmap.width,
+                pixmap.height,
+                pixmap.width * 4,
+            );
+            let paintable = gtk4::gdk::Texture::for_pixbuf(&pixbuf);
+            let img = Image::builder()
+                .paintable(&paintable)
+                .pixel_size(18)
+                .build();
+            img.set_css_classes(&["tray-icon"]);
+            btn.set_child(Some(&img));
+        }
+    } else {
+        let img = Image::builder()
+            .icon_name("image-missing")
+            .pixel_size(18)
+            .build();
+        btn.set_child(Some(&img));
+    }
+}
+
+fn create_menu_vbox(
+    items: Vec<system_tray::menu::MenuItem>,
+    id: String,
+    menu_path: String,
+    tx_activate: mpsc::UnboundedSender<TrayAction>,
+    parent_popover: Option<Popover>,
+) -> Box {
+    let vbox = Box::new(Orientation::Vertical, 0);
+    for item in items {
+        if !item.visible { continue; }
+        if item.menu_type == system_tray::menu::MenuType::Separator {
+            vbox.append(&gtk4::Separator::new(Orientation::Horizontal));
+            continue;
+        }
+
+        let label_text = item.label.clone().unwrap_or_else(|| "".to_string());
+        let item_box = Box::new(Orientation::Horizontal, 0);
+        
+        let label = gtk4::Label::new(Some(&label_text));
+        label.set_halign(gtk4::Align::Start);
+        label.set_hexpand(true);
+        item_box.append(&label);
+
+        if !item.submenu.is_empty() {
+            let arrow = Image::from_icon_name("pan-end-symbolic");
+            item_box.append(&arrow);
+        }
+
+        let item_btn = Button::builder()
+            .child(&item_box)
+            .build();
+        item_btn.set_halign(gtk4::Align::Fill);
+        if !item.enabled { item_btn.set_sensitive(false); }
+
+        if !item.submenu.is_empty() {
+            let id_sub = id.clone();
+            let path_sub = menu_path.clone();
+            let sub_items = item.submenu.clone();
+            let tx_sub = tx_activate.clone();
+            let btn_sub = item_btn.clone();
+            
+            item_btn.connect_clicked(move |_| {
+                let sub_popover = Popover::builder()
+                    .position(gtk4::PositionType::Right)
+                    .autohide(true)
+                    .has_arrow(true)
+                    .build();
+                sub_popover.set_parent(&btn_sub);
+                let sub_vbox = create_menu_vbox(sub_items.clone(), id_sub.clone(), path_sub.clone(), tx_sub.clone(), Some(sub_popover.clone()));
+                sub_popover.set_child(Some(&sub_vbox));
+                sub_popover.popup();
+            });
+        } else {
+            let id_act = id.clone();
+            let path_act = menu_path.clone();
+            let item_id = item.id;
+            let tx_act_clone = tx_activate.clone();
+            let p_pop = parent_popover.clone();
+            item_btn.connect_clicked(move |_| {
+                let _ = tx_act_clone.send(TrayAction::MenuAction { id: id_act.clone(), menu_path: path_act.clone(), item_id });
+                if let Some(p) = &p_pop {
+                    p.popdown();
+                }
+            });
+        }
+        
+        vbox.append(&item_btn);
+    }
+    vbox
 }

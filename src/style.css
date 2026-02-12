@@ -29,14 +29,29 @@ label {
 }
 
 popover contents {
-    background-color: rgba(0, 0, 0, 0.7);
+    background-color: rgba(0, 0, 0, 0.82);
     border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 button {
-    all: unset;
+    background: none;
+    border: none;
+    box-shadow: none;
     padding: 0 8px;
+    margin: 0;
+}
+
+#tray {
+    padding: 0;
+    margin: 0;
+}
+
+#tray-btn {
+    padding: 0 4px;
+    margin: 0;
+    min-width: 28px;
+    min-height: 32px;
 }
 
 #workspaces button {
@@ -48,7 +63,6 @@ button {
 }
 
 #workspaces label {
-    /*padding: 0;*/
     font-size: 16px;
     margin-left: -8px;
 }
@@ -57,6 +71,11 @@ button:hover {
     background: rgba(255, 255, 255, 0.82);
     color: rgba(0, 0, 0, 0.9);
     transition-duration: 0.3s;
+}
+
+.tray-icon {
+    margin: 0;
+    padding: 0;
 }
 
 #workspaces button.focused,
