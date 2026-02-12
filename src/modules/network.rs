@@ -100,7 +100,7 @@ pub fn init(container: &gtk4::Box) {
                 p_wifi.set_visible(false);
             }
             
-            p_stats.set_text(&format!("  Up: {:>7}bps    Down: {:>7}bps", 
+            p_stats.set_text(&format!("Up: {:>7}bps  Down: {:>7}bps", 
                 format_speed(info.up_speed), format_speed(info.down_speed)));
         }
     });
