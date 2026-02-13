@@ -1,4 +1,4 @@
-use gtk4::Label;
+use gtk4::Button;
 use gtk4::prelude::*;
 use std::time::Duration;
 use tokio::process::Command;
@@ -10,14 +10,17 @@ pub fn init(
     prefix: &str,
     _click_command: Option<&str>,
 ) {
-    let label = Label::builder().label(format!("{} ...", prefix)).build();
-    container.append(&label);
+    let button = Button::builder().label(format!("{} ...", prefix)).build();
+
+    button.add_css_class("btn");
+
+    container.append(&button);
 
     let cmd_own = command.to_string();
     let prefix_own = prefix.to_string();
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
 
-    let l = label.clone();
+    let b = button.clone();
     gtk4::glib::MainContext::default().spawn_local(async move {
         while let Some(out) = rx.recv().await {
             let text = if prefix_own.is_empty() {
@@ -25,7 +28,7 @@ pub fn init(
             } else {
                 format!("{} {}", prefix_own, out.trim())
             };
-            l.set_label(&text);
+            b.set_label(&text);
         }
     });
 

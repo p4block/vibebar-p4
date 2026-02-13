@@ -1,24 +1,28 @@
 use chrono::{Datelike, Local};
 use gtk4::prelude::*;
-use gtk4::{EventControllerMotion, Label, Popover, PositionType};
+use gtk4::{Button, EventControllerMotion, Label, Popover, PositionType};
 use std::time::Duration;
 
 pub fn init(container: &gtk4::Box) {
-    let label = Label::builder()
+    // 1. Create a Button instead of a Label
+    let button = Button::builder()
         .label(format!("  {}", Local::now().format("%a %d %b %H:%M")))
+        .has_frame(false) // Makes it look flat, common for status bars
         .build();
 
-    container.append(&label);
+    button.add_css_class("btn");
 
+    container.append(&button);
+
+    // 2. Setup the Popover
     let popover = Popover::builder()
         .position(PositionType::Top)
         .autohide(false)
         .has_arrow(true)
         .build();
-    popover.set_parent(&label);
 
-    // Explicitly point to the top of the label
-    popover.set_pointing_to(Some(&gtk4::gdk::Rectangle::new(0, 0, 100, 1)));
+    // Set the button as the parent of the popover
+    popover.set_parent(&button);
 
     let popover_label = Label::builder()
         .use_markup(true)
@@ -27,22 +31,31 @@ pub fn init(container: &gtk4::Box) {
     popover_label.set_widget_name("popover-label");
     popover.set_child(Some(&popover_label));
 
+    // 3. Hover logic using EventControllerMotion on the Button
     let motion_controller = EventControllerMotion::new();
+
     let p_enter = popover.clone();
     motion_controller.connect_enter(move |_, _, _| {
         p_enter.popup();
     });
+
     let p_leave = popover.clone();
     motion_controller.connect_leave(move |_| {
         p_leave.popdown();
     });
-    label.add_controller(motion_controller);
 
-    // Update every minute
+    button.add_controller(motion_controller);
+
+    // 4. Update loop
     let p_label = popover_label.clone();
+    let b_clone = button.clone();
     glib::timeout_add_local(Duration::from_secs(1), move || {
-        label.set_label(&format!("  {}", Local::now().format("%a %d %b %H:%M")));
+        // Update the button's text
+        b_clone.set_label(&format!("  {}", Local::now().format("%a %d %b %H:%M")));
+
+        // Update the calendar inside the popover
         p_label.set_markup(&get_calendar_markup());
+
         glib::ControlFlow::Continue
     });
 }
@@ -53,16 +66,14 @@ fn get_calendar_markup() -> String {
 
     let mut full_markup = String::from("<tt><small>");
 
-    // Process months in rows of 3
     for row in 0..4 {
-        let mut lines = vec![String::new(); 9]; // Header + days_header + 7 weeks max
+        let mut lines = vec![String::new(); 9];
 
         for col in 0..3 {
             let month = (row * 3 + col + 1) as u32;
             let month_date = now.with_month(month).unwrap().with_day(1).unwrap();
             let month_name = month_date.format("%B").to_string();
 
-            // Month Header
             let padding = (20 - month_name.len()) / 2;
             lines[0].push_str(&format!(
                 "{:>width$}{:<width$}",
@@ -70,14 +81,13 @@ fn get_calendar_markup() -> String {
                 month_name,
                 width = padding
             ));
-            if !month_name.len().is_multiple_of(2) && !lines[0].len().is_multiple_of(20) {
+            if !month_name.len().wrapping_rem(2) == 0 && !lines[0].len().wrapping_rem(20) == 0 {
                 lines[0].push(' ');
             }
-            while !lines[0].len().is_multiple_of(22) {
+            while lines[0].len() % 22 != 0 {
                 lines[0].push(' ');
             }
 
-            // Weekdays Header
             lines[1].push_str("<span color='#ffcc66'>Mo Tu We Th Fr Sa Su</span>  ");
 
             let weekday = month_date.weekday().num_days_from_monday();
