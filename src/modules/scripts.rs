@@ -1,12 +1,16 @@
-use gtk4::prelude::*;
 use gtk4::Label;
+use gtk4::prelude::*;
 use std::time::Duration;
 use tokio::process::Command;
 
-pub fn init(container: &gtk4::Box, command: &str, interval_secs: u64, prefix: &str) {
-    let label = Label::builder()
-        .label(&format!("{} ...", prefix))
-        .build();
+pub fn init(
+    container: &gtk4::Box,
+    command: &str,
+    interval_secs: u64,
+    prefix: &str,
+    _click_command: Option<&str>,
+) {
+    let label = Label::builder().label(format!("{} ...", prefix)).build();
     container.append(&label);
 
     let cmd_own = command.to_string();
@@ -29,19 +33,16 @@ pub fn init(container: &gtk4::Box, command: &str, interval_secs: u64, prefix: &s
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async move {
             loop {
-                let output = Command::new("sh")
-                    .arg("-c")
-                    .arg(&cmd_own)
-                    .output()
-                    .await;
+                let output = Command::new("sh").arg("-c").arg(&cmd_own).output().await;
 
                 if let Ok(out) = output {
                     let s = String::from_utf8_lossy(&out.stdout).to_string();
-                    let display_text = if let Ok(json) = serde_json::from_str::<serde_json::Value>(&s) {
-                        json["text"].as_str().unwrap_or(&s).to_string()
-                    } else {
-                        s.trim().to_string()
-                    };
+                    let display_text =
+                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&s) {
+                            json["text"].as_str().unwrap_or(&s).to_string()
+                        } else {
+                            s.trim().to_string()
+                        };
                     let _ = tx.send(display_text);
                 }
 

@@ -7,18 +7,19 @@ use tokio::runtime::Runtime;
 use glib::{self, MainContext};
 
 pub fn init(container: &gtk4::Box) {
-    let label = Label::builder()
+    let btn = Button::builder()
         .label("IP: ...")
         .build();
+    btn.add_css_class("btn");
 
-    container.append(&label);
+    container.append(&btn);
 
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
     
-    let l = label.clone();
+    let btn_clone = btn.clone();
     MainContext::default().spawn_local(async move {
         while let Some(ips) = rx.recv().await {
-            l.set_label(&format!("IP: {}", ips));
+            btn_clone.set_label(&format!("IP: {}", ips));
         }
     });
 

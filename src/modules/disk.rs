@@ -1,22 +1,23 @@
-use gtk4::prelude::*;
-use gtk4::Label;
-use std::time::Duration;
 use glib;
+use gtk4::Button;
+use gtk4::prelude::*;
+use std::time::Duration;
 
 pub fn init(container: &gtk4::Box, path: &str, label_prefix: &str) {
-    let label = Label::builder()
-        .label(&format!("{} ...", label_prefix))
+    let btn = Button::builder()
+        .label(format!("{} ...", label_prefix))
         .build();
-    container.append(&label);
+    btn.add_css_class("btn");
+    container.append(&btn);
 
     let path_clone = path.to_string();
     let prefix_clone = label_prefix.to_string();
-    let label_clone = label.clone();
+    let btn_clone = btn.clone();
     let update = move || {
         if let Ok(stat) = nix::sys::statvfs::statvfs(path_clone.as_str()) {
             let free_bytes = stat.blocks_available() * stat.fragment_size();
             let free_gb = free_bytes as f64 / (1024.0 * 1024.0 * 1024.0);
-            label_clone.set_label(&format!("{} {:.1}GB", prefix_clone, free_gb));
+            btn_clone.set_label(&format!("{} {:.1}GB", prefix_clone, free_gb));
         }
     };
 

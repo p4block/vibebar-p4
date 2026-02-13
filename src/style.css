@@ -1,49 +1,47 @@
 * {
     border: none;
     border-radius: 0;
-    font-family: "Terminess Nerd Font", "Font Awesome 6 Free Solid", "Font Awesome 6 Brands";
+    font-family:
+        "Terminess Nerd Font", "Font Awesome 6 Free Solid",
+        "Font Awesome 6 Brands";
     font-size: 12px;
+    min-height: 24px;
 }
 
 window {
-    background-color: rgba(0, 0, 0, 0.82);
+    background-color: transparent;
     color: white;
 }
 
 #main-container {
-    background-color: transparent;
-    margin: 0 1280px;
+    background-color: rgba(0, 0, 0, 0.82);
+    margin: 0;
+    padding: 0 1280px;
     border-radius: 0;
-    padding: 0;
-    min-height: 24px;
 }
 
 label {
-    padding: 0 10px;
+    padding: 0 12px;
     font-family: "Terminess Nerd Font", monospace;
 }
 
-button {
+.btn {
     all: unset;
-    padding: 0 8px;
+    margin: 0;
+    padding: 0 12px;
 }
 
-#workspaces button {
-    min-width: 40px;
-    padding: 0 6px;
-}
-
-button:hover {
+.btn:hover {
     background: rgba(255, 255, 255, 0.82);
     color: rgba(0, 0, 0, 0.9);
 }
 
-#workspaces button.focused,
-#workspaces button.active {
+/*.btn:focus {
     background-color: #ffffff;
     color: rgba(0, 0, 0, 0.9);
-}
+}*/
 
-#workspaces button.urgent {
-    background-color: #eb4d4b;
+.btn.focused {
+    background-color: #ffffff;
+    color: rgba(0, 0, 0, 0.9);
 }

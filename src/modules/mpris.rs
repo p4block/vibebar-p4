@@ -1,19 +1,18 @@
+use gtk4::Button;
 use gtk4::prelude::*;
-use gtk4::Label;
 use mpris::PlayerFinder;
 use std::time::Duration;
 
 pub fn init(container: &gtk4::Box) {
-    let label = Label::builder()
-        .label("")
-        .build();
-    container.append(&label);
+    let btn = Button::builder().label("").build();
+    btn.add_css_class("btn");
+    container.append(&btn);
 
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
-    let l = label.clone();
+    let btn_clone = btn.clone();
     gtk4::glib::MainContext::default().spawn_local(async move {
         while let Some(txt) = rx.recv().await {
-            l.set_label(&txt);
+            btn_clone.set_label(&txt);
         }
     });
 

@@ -1,34 +1,136 @@
 use gtk4::prelude::*;
-use gtk4::Label;
-use pulsectl::controllers::SinkController;
-use pulsectl::controllers::DeviceControl;
-use std::time::Duration;
+use gtk4::{Button, EventControllerScroll, EventControllerScrollFlags};
+use pulse::context::subscribe::{Facility, InterestMaskSet};
+use pulse::context::{Context, FlagSet as ContextFlagSet};
+use pulse::mainloop::standard::Mainloop;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 pub fn init(container: &gtk4::Box) {
-    let label = Label::builder()
-        .label(" ...%")
-        .build();
-    container.append(&label);
+    let btn = Button::builder().label(" ...%").build();
+    btn.add_css_class("btn");
+    container.append(&btn);
+
+    let scroll = EventControllerScroll::new(EventControllerScrollFlags::VERTICAL);
+    btn.add_controller(scroll.clone());
+
+    scroll.connect_scroll(move |_, _, dy| {
+        if dy < 0.0 {
+            let _ = std::process::Command::new("pactl")
+                .arg("set-sink-volume")
+                .arg("@DEFAULT_SINK@")
+                .arg("+5%")
+                .spawn();
+        } else if dy > 0.0 {
+            let _ = std::process::Command::new("pactl")
+                .arg("set-sink-volume")
+                .arg("@DEFAULT_SINK@")
+                .arg("-5%")
+                .spawn();
+        }
+        glib::Propagation::Stop
+    });
+
+    btn.connect_clicked(|_| {
+        let _ = std::process::Command::new("pactl")
+            .arg("set-sink-mute")
+            .arg("@DEFAULT_SINK@")
+            .arg("toggle")
+            .spawn();
+    });
 
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
-    let l = label.clone();
+    let b = btn.clone();
     gtk4::glib::MainContext::default().spawn_local(async move {
         while let Some(vol) = rx.recv().await {
-            l.set_label(&vol);
+            b.set_label(&vol);
         }
     });
 
     std::thread::spawn(move || {
-        let mut controller = SinkController::create().unwrap();
-        loop {
-            if let Ok(default_sink) = controller.get_default_device() {
-                let vol_val = default_sink.volume.avg().0;
-                let perc = (vol_val as f64 / 65536.0 * 100.0) as i32;
-                let muted = default_sink.mute;
-                let icon = if muted { "" } else { "" };
-                let _ = tx.send(format!("{}   {}%", icon, perc));
-            }
-            std::thread::sleep(Duration::from_secs(1));
+        let mut mainloop = Mainloop::new().expect("Failed to create pulse mainloop");
+        let mut proplist = pulse::proplist::Proplist::new().unwrap();
+        proplist
+            .set_str(
+                pulse::proplist::properties::APPLICATION_NAME,
+                "vibebar-p4-volume",
+            )
+            .unwrap();
+
+        let context = Rc::new(RefCell::new(
+            Context::new_with_proplist(&mainloop, "VolumeContext", &proplist)
+                .expect("Failed to create pulse context"),
+        ));
+
+        {
+            let mut ctx = context.borrow_mut();
+            ctx.connect(None, ContextFlagSet::NOFLAGS, None)
+                .expect("Failed to connect context");
         }
+
+        // Wait for context to be ready
+        loop {
+            let _ = mainloop.iterate(false);
+            let state = context.borrow().get_state();
+            if state == pulse::context::State::Ready {
+                break;
+            }
+            if !state.is_good() {
+                return;
+            }
+        }
+
+        let tx_cb = tx.clone();
+        let context_cb = context.clone();
+
+        let refresh_volume = move || {
+            let tx_inner = tx_cb.clone();
+            let context_inner = context_cb.clone();
+
+            // Get introspector fresh from context borrow
+            let introspect = context_inner.borrow().introspect();
+
+            introspect.get_server_info(move |server_info| {
+                if let Some(default_sink_name) = &server_info.default_sink_name {
+                    let sink_name: String = default_sink_name.to_string();
+                    let tx_innermost = tx_inner.clone();
+                    let context_innermost = context_inner.clone();
+
+                    // Get introspector again fresh for the nested callback
+                    context_innermost
+                        .borrow()
+                        .introspect()
+                        .get_sink_info_by_name(&sink_name, move |sink_res| {
+                            if let pulse::callbacks::ListResult::Item(sink_info) = sink_res {
+                                let vol = sink_info.volume.avg().0;
+                                let perc = (vol as f64 / 65536.0 * 100.0).round() as i32;
+                                let muted = sink_info.mute;
+                                let icon = if muted { "" } else { "" };
+                                let _ = tx_innermost.send(format!("{}  {}%", icon, perc));
+                            }
+                        });
+                }
+            });
+        };
+
+        // Initial update
+        refresh_volume();
+
+        let refresh_volume_cb = Rc::new(refresh_volume);
+        let refresh_volume_cb_inner = refresh_volume_cb.clone();
+
+        context
+            .borrow_mut()
+            .set_subscribe_callback(Some(Box::new(move |fac, _op, _idx| {
+                if fac == Some(Facility::Sink) || fac == Some(Facility::Server) {
+                    refresh_volume_cb_inner();
+                }
+            })));
+
+        context
+            .borrow_mut()
+            .subscribe(InterestMaskSet::SINK | InterestMaskSet::SERVER, |_| {});
+
+        let _ = mainloop.run();
     });
 }
