@@ -11,23 +11,40 @@ pub fn init(container: &gtk4::Box) {
     btn.add_css_class("btn");
     container.append(&btn);
 
+    // Use default flags to receive raw high-resolution scroll events.
+    // We do NOT use DISCRETE here because we want to accumulate the raw deltas manually.
     let scroll = EventControllerScroll::new(EventControllerScrollFlags::VERTICAL);
     btn.add_controller(scroll.clone());
 
+    // Accumulator to track fractional scroll events from high-res mice
+    let scroll_accum = Rc::new(RefCell::new(0.0));
+    let scroll_accum_clone = scroll_accum.clone();
+
     scroll.connect_scroll(move |_, _, dy| {
-        if dy < 0.0 {
+        let mut acc = scroll_accum_clone.borrow_mut();
+        *acc += dy;
+
+        // Threshold of 1.0 corresponds to a standard "click" or "notch"
+        // Handle Volume UP (dy < 0)
+        while *acc <= -1.0 {
             let _ = std::process::Command::new("pactl")
                 .arg("set-sink-volume")
                 .arg("@DEFAULT_SINK@")
                 .arg("+5%")
                 .spawn();
-        } else if dy > 0.0 {
+            *acc += 1.0;
+        }
+
+        // Handle Volume DOWN (dy > 0)
+        while *acc >= 1.0 {
             let _ = std::process::Command::new("pactl")
                 .arg("set-sink-volume")
                 .arg("@DEFAULT_SINK@")
                 .arg("-5%")
                 .spawn();
+            *acc -= 1.0;
         }
+
         glib::Propagation::Stop
     });
 

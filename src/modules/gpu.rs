@@ -8,6 +8,10 @@ pub fn init(container: &gtk4::Box) {
     btn.add_css_class("btn");
     container.append(&btn);
 
+    btn.connect_clicked(|_| {
+        let _ = Command::new("lact").spawn();
+    });
+
     let gesture = GestureClick::new();
     gesture.set_button(1);
     gesture.connect_pressed(|_, _, _, _| {

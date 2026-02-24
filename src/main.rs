@@ -79,16 +79,11 @@ fn create_window(
 
     modules::mpris::init(&right);
     modules::scripts::init(&right, "checkupdates | wc -l", 3600, "", None);
-    modules::scripts::init(
-        &right,
-        "~/.config/waybar/scripts/airqualityindex.sh",
-        1800,
-        "",
-        None,
-    );
 
     modules::network::init(&right);
+    modules::aqi::init(&right);
 
+    modules::mic::init(&right);
     modules::volume::init(&right);
     modules::clock::init(&right);
 

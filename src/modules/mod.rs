@@ -1,7 +1,9 @@
+pub mod aqi;
 pub mod clock;
 pub mod cpu;
 pub mod disk;
 pub mod gpu;
+pub mod mic;
 pub mod mpris;
 pub mod network;
 pub mod ram;
