@@ -11,3 +11,4 @@ pub mod scripts;
 pub mod tray;
 pub mod volume;
 pub mod workspaces;
+pub mod xembed;

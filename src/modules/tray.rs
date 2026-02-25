@@ -1,3 +1,4 @@
+use crate::modules::xembed::{XEmbedBackend, XEmbedEvent};
 use gtk4::prelude::*;
 use gtk4::{Box, Button, GestureClick, Image, Orientation, Popover};
 use std::collections::HashMap;
@@ -34,6 +35,7 @@ struct MenuState {
 
 pub struct TrayBackend {
     _client: Arc<Client>,
+    pub xembed: Option<Arc<XEmbedBackend>>,
     tx_activate: mpsc::UnboundedSender<TrayAction>,
     titems: Arc<Mutex<HashMap<String, TrayItemInfo>>>,
     tmenus: Arc<Mutex<HashMap<String, MenuState>>>,
@@ -191,13 +193,22 @@ impl TrayBackend {
             }
         });
 
+        let xembed = XEmbedBackend::new().await;
+
         Some(Arc::new(Self {
             _client: client,
+            xembed,
             tx_activate,
             titems,
             tmenus,
             tx_ui,
         }))
+    }
+
+    pub fn dismiss_menus(&self) {
+        if let Some(xb) = &self.xembed {
+            xb.dismiss_menus();
+        }
     }
 }
 
@@ -205,6 +216,14 @@ pub fn init(container: &gtk4::Box, backend: Arc<TrayBackend>) {
     let tray_box = Box::new(Orientation::Horizontal, 0);
     tray_box.set_widget_name("tray");
     container.append(&tray_box);
+
+    // Dismiss X11 menus when clicking the tray area
+    let gesture_dismiss = GestureClick::new();
+    let backend_dismiss = backend.clone();
+    gesture_dismiss.connect_pressed(move |_, _, _, _| {
+        backend_dismiss.dismiss_menus();
+    });
+    tray_box.add_controller(gesture_dismiss);
 
     let gui_items: Arc<Mutex<HashMap<String, gtk4::Widget>>> = Arc::new(Mutex::new(HashMap::new()));
 
@@ -307,14 +326,99 @@ pub fn init(container: &gtk4::Box, backend: Arc<TrayBackend>) {
             }
         }
     });
+
+    if let Some(xbackend) = &backend.xembed {
+        let mut rx_xembed = xbackend.subscribe();
+        let tbox_x = tray_box.clone();
+        let xbackend_cl = xbackend.clone();
+        let xgui_items: Arc<Mutex<HashMap<u32, gtk4::Widget>>> =
+            Arc::new(Mutex::new(HashMap::new()));
+
+        gtk4::glib::MainContext::default().spawn_local(async move {
+            while let Ok(event) = rx_xembed.recv().await {
+                let mut map = xgui_items.lock().unwrap();
+                match event {
+                    XEmbedEvent::Add(win) => {
+                        let btn = Button::builder()
+                            .css_classes(vec!["btn".to_string(), "xembed".to_string()])
+                            .build();
+                        setup_xembed_signals(&btn, win, &xbackend_cl);
+                        tbox_x.append(&btn);
+                        map.insert(win, btn.upcast());
+                    }
+                    XEmbedEvent::Remove(win) => {
+                        if let Some(widget) = map.remove(&win) {
+                            tbox_x.remove(&widget);
+                        }
+                    }
+                    XEmbedEvent::Update(win, pixels) => {
+                        if let Some(widget) = map.get(&win) {
+                            if let Some(btn) = widget.downcast_ref::<Button>() {
+                                update_xembed_icon(btn, &pixels);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+}
+
+fn setup_xembed_signals(btn: &Button, win: u32, backend: &Arc<XEmbedBackend>) {
+    let backend_cl = backend.clone();
+    let gesture_left = GestureClick::new();
+    gesture_left.set_button(1);
+    gesture_left.connect_pressed(move |_, _, x, y| {
+        backend_cl.dismiss_menus();
+        backend_cl.send_click(win, x as i32, y as i32, 1);
+    });
+    btn.add_controller(gesture_left);
+
+    let gesture_right = GestureClick::new();
+    gesture_right.set_button(3);
+    let backend_right = backend.clone();
+    gesture_right.connect_pressed(move |_, _, x, y| {
+        backend_right.dismiss_menus();
+        backend_right.send_click(win, x as i32, y as i32, 3);
+    });
+    btn.add_controller(gesture_right);
+}
+
+fn update_xembed_icon(btn: &Button, pixels: &[u8]) {
+    if pixels.is_empty() {
+        return;
+    }
+    // Assume 16x16 or 24x24 icons for now, or get from pixels.len()
+    let size = ((pixels.len() / 4) as f64).sqrt() as i32;
+    if size * size * 4 != pixels.len() as i32 {
+        return;
+    }
+
+    let bytes = gtk4::glib::Bytes::from(pixels);
+    let pixbuf = gdk4::gdk_pixbuf::Pixbuf::from_bytes(
+        &bytes,
+        gdk4::gdk_pixbuf::Colorspace::Rgb,
+        true,
+        8,
+        size,
+        size,
+        size * 4,
+    );
+    let img = Image::builder()
+        .paintable(&gtk4::gdk::Texture::for_pixbuf(&pixbuf))
+        .pixel_size(16)
+        .build();
+    btn.set_child(Some(&img));
 }
 
 fn setup_button_signals(btn: &Button, id: &str, backend: &Arc<TrayBackend>) {
     let id_clone = id.to_string();
     let tx_act = backend.tx_activate.clone();
     let btn_handle = btn.clone();
+    let backend_act = backend.clone();
 
     btn.connect_clicked(move |_| {
+        backend_act.dismiss_menus();
         let mut x_abs = 0;
         let mut y_abs = 0;
         if let Some(window) = btn_handle
@@ -349,8 +453,10 @@ fn setup_button_signals(btn: &Button, id: &str, backend: &Arc<TrayBackend>) {
     let tx_act_right = backend.tx_activate.clone();
     let btn_right = btn.clone();
     let backend_right = backend.clone();
+    let backend_dismiss_right = backend.clone();
 
     gesture.connect_pressed(move |_, _, _, _| {
+        backend_dismiss_right.dismiss_menus();
         let menu_opt = {
             let m = backend_right.tmenus.lock().unwrap();
             m.get(&id_right)
