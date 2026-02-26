@@ -16,6 +16,7 @@ pub fn init(container: &gtk4::Box) {
 
     // 2. Setup the Popover
     let popover = Popover::builder()
+        .css_classes(vec!["standard-popover".to_string()])
         .position(PositionType::Top)
         .autohide(false)
         .has_arrow(true)

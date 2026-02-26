@@ -28,6 +28,7 @@ pub fn init(container: &gtk4::Box) {
     container.append(&btn);
 
     let popover = Popover::builder()
+        .css_classes(vec!["standard-popover".to_string()])
         .position(gtk4::PositionType::Bottom)
         .autohide(false)
         .has_arrow(true)
@@ -35,10 +36,6 @@ pub fn init(container: &gtk4::Box) {
     popover.set_parent(&btn);
 
     let popover_vbox = Box::new(Orientation::Vertical, 4);
-    popover_vbox.set_margin_start(10);
-    popover_vbox.set_margin_end(10);
-    popover_vbox.set_margin_top(10);
-    popover_vbox.set_margin_bottom(10);
     popover.set_child(Some(&popover_vbox));
 
     let pop_title = Label::builder().halign(gtk4::Align::Start).build();
@@ -46,10 +43,10 @@ pub fn init(container: &gtk4::Box) {
     let pop_wifi = Label::builder().halign(gtk4::Align::Start).build();
     let pop_stats = Label::builder().halign(gtk4::Align::Start).build();
 
-    pop_title.add_css_class("network-popover-title");
-    pop_ip.add_css_class("network-popover-info");
-    pop_wifi.add_css_class("network-popover-info");
-    pop_stats.add_css_class("network-popover-stats");
+    pop_title.add_css_class("popover-title");
+    pop_ip.add_css_class("popover-info");
+    pop_wifi.add_css_class("popover-info");
+    pop_stats.add_css_class("popover-stats");
 
     popover_vbox.append(&pop_title);
     popover_vbox.append(&pop_ip);

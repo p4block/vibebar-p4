@@ -1,11 +1,17 @@
+/* 
+ * vibebar-p4 style.css 
+ * Clean, Unified Design System
+ */
+
+/* --- Base Reset --- */
 * {
     border: none;
     border-radius: 0;
-    font-family:
-        "Terminess Nerd Font", "Font Awesome 6 Free Solid",
-        "Font Awesome 6 Brands";
+    font-family: "Terminess Nerd Font", "Font Awesome 6 Free Solid", "Font Awesome 6 Brands";
     font-size: 12px;
-    min-height: 24px;
+    text-shadow: none;
+    box-shadow: none;
+    -gtk-icon-shadow: none;
 }
 
 window {
@@ -13,29 +19,101 @@ window {
     color: white;
 }
 
+/* --- Main Bar --- */
 #main-container {
-    background-color: rgba(0, 0, 0, 0.82);
+    background-color: rgba(0, 0, 0, 0.9);
     margin: 0;
     padding: 0 1280px;
     border-radius: 0;
 }
 
+/* --- Bar Elements --- */
 .btn {
     all: unset;
     margin: 0;
-    padding: 0 12px;
+    padding: 0 10px;
+    min-height: 24px;
 }
 
 .btn:hover {
-    background: rgba(255, 255, 255, 0.82);
-    color: rgba(0, 0, 0, 0.9);
+    background-color: rgba(255, 255, 255, 0.1);
 }
 
 .btn.focused {
-    background: rgba(255, 255, 255, 0.82);
-    color: rgba(0, 0, 0, 0.9);
+    background-color: rgba(255, 255, 255, 0.15);
 }
 
+/* --- Popover System --- */
+popover.standard-popover contents {
+    background-color: rgba(25, 25, 25, 0.99);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    padding: 4px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+
+popover.standard-popover arrow {
+    background-color: rgba(25, 25, 25, 0.99);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* Popover Text & Labels */
+.standard-popover label {
+    padding: 2px 4px;
+}
+
+.popover-title {
+    font-weight: bold;
+    color: #ffcc66;
+    margin-bottom: 4px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.popover-info {
+    opacity: 0.9;
+}
+
+.popover-stats {
+    font-family: monospace;
+    font-size: 11px;
+    opacity: 0.7;
+    margin-top: 4px;
+}
+
+/* Popover Interactive Elements (Menus) */
+.menu-btn {
+    all: unset;
+    padding: 4px 10px;
+    border-radius: 4px;
+    margin: 0;
+    min-height: 20px;
+}
+
+.menu-btn:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.menu-btn:active {
+    background-color: rgba(255, 255, 255, 0.15);
+}
+
+.menu-btn:disabled {
+    opacity: 0.3;
+}
+
+.menu-btn label {
+    font-weight: 400;
+}
+
+separator {
+    background-color: rgba(255, 255, 255, 0.1);
+    margin: 4px 6px;
+    min-height: 1px;
+}
+
+/* --- Module Specifics --- */
 #tray .btn.xembed {
     padding: 0 12px;
 }

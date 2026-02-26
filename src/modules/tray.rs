@@ -465,6 +465,7 @@ fn setup_button_signals(btn: &Button, id: &str, backend: &Arc<TrayBackend>) {
 
         if let Some((menu_path, menu)) = menu_opt {
             let popover = Popover::builder()
+                .css_classes(vec!["standard-popover".to_string()])
                 .position(gtk4::PositionType::Top)
                 .autohide(true)
                 .has_arrow(true)
@@ -554,7 +555,10 @@ fn create_menu_vbox(
             item_box.append(&Image::from_icon_name("pan-end-symbolic"));
         }
 
-        let item_btn = Button::builder().child(&item_box).build();
+        let item_btn = Button::builder()
+            .css_classes(vec!["menu-btn".to_string()])
+            .child(&item_box)
+            .build();
         item_btn.set_sensitive(item.enabled);
 
         if !item.submenu.is_empty() {
@@ -566,6 +570,7 @@ fn create_menu_vbox(
 
             item_btn.connect_clicked(move |_| {
                 let sub_pop = Popover::builder()
+                    .css_classes(vec!["standard-popover".to_string()])
                     .position(gtk4::PositionType::Right)
                     .autohide(true)
                     .build();
