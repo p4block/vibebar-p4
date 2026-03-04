@@ -30,8 +30,7 @@ pub fn init(container: &gtk4::Box) {
                         _ => "⏹",
                     };
                     let mut text = format!("{} {} - {}", icon, artist, title);
-                let mut char_count = text.chars().count();
-                if char_count > 60 {
+                if text.chars().count() > 60 {
                     while text.chars().count() > 57 {
                         text.pop();
                     }
