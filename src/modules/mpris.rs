@@ -29,7 +29,15 @@ pub fn init(container: &gtk4::Box) {
                         mpris::PlaybackStatus::Paused => "",
                         _ => "⏹",
                     };
-                    let _ = tx.send(format!("{} {} - {}", icon, artist, title));
+                    let mut text = format!("{} {} - {}", icon, artist, title);
+                let mut char_count = text.chars().count();
+                if char_count > 60 {
+                    while text.chars().count() > 57 {
+                        text.pop();
+                    }
+                    text.push_str("...");
+                }
+                let _ = tx.send(text);
                 } else {
                     let _ = tx.send("".to_string());
                 }
