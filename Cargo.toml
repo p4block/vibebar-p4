@@ -30,3 +30,6 @@ nix = { version = "0.29", features = ["fs", "process"] }
 cairo-rs = "0.20"
 mpris = "2.0"
 x11rb = { version = "0.13", features = ["all-extensions"] }
+
+[profile.release]
+debug = true

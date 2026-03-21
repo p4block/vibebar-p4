@@ -16,7 +16,7 @@ pub fn init(container: &gtk4::Box) {
     let mut sys = System::new();
     let mut components = Components::new();
 
-    glib::timeout_add_local(Duration::from_millis(100), move || {
+    glib::timeout_add_local(Duration::from_secs(1), move || {
         sys.refresh_cpu_usage();
         sys.refresh_cpu_specifics(sysinfo::CpuRefreshKind::nothing().with_frequency());
         components.refresh(false);

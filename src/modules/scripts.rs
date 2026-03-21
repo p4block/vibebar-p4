@@ -35,6 +35,7 @@ pub fn init(
     std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async move {
+            tokio::time::sleep(Duration::from_secs(5)).await;
             loop {
                 let output = Command::new("sh").arg("-c").arg(&cmd_own).output().await;
 

@@ -112,6 +112,7 @@ pub fn init(container: &gtk4::Box) {
         let mut last_rx = 0u64;
         let mut last_tx = 0u64;
         let mut last_iface = String::new();
+        let mut last_external_check = 0u32;
 
         loop {
             let mut info = NetworkInfo {
@@ -146,20 +147,17 @@ pub fn init(container: &gtk4::Box) {
                         last_rx = 0;
                         last_tx = 0;
                         last_iface = iface.clone();
+                        // Force info update on change
+                        last_external_check = 0; 
                     }
 
                     info.interface = iface.clone();
-                    let is_wifi = fs::metadata(format!("/sys/class/net/{}/wireless", iface))
-                        .is_ok()
+                    let is_wifi = fs::metadata(format!("/sys/class/net/{}/wireless", iface)).is_ok()
                         || fs::metadata(format!("/sys/class/net/{}/phy80211", iface)).is_ok();
 
-                    info.conn_type = if is_wifi {
-                        "WiFi".to_string()
-                    } else {
-                        "Ethernet".to_string()
-                    };
+                    info.conn_type = if is_wifi { "WiFi".to_string() } else { "Ethernet".to_string() };
 
-                    if is_wifi {
+                    if is_wifi && last_external_check == 0 {
                         if let Ok(output) = Command::new("iwgetid").arg("-r").output() {
                             let s = String::from_utf8_lossy(&output.stdout).trim().to_string();
                             if !s.is_empty() {
@@ -173,63 +171,50 @@ pub fn init(container: &gtk4::Box) {
                                 if line.contains(&iface) {
                                     let parts: Vec<&str> = line.split_whitespace().collect();
                                     if let Some(lvl) = parts.get(3) {
-                                        let level =
-                                            lvl.trim_end_matches('.').parse::<f32>().unwrap_or(0.0);
-                                        // Simple mapping: -100 to -50 -> 0 to 100
-                                        let strength =
-                                            ((level + 100.0) * 2.0).clamp(0.0, 100.0) as u32;
+                                        let level = lvl.trim_end_matches('.').parse::<f32>().unwrap_or(0.0);
+                                        let strength = ((level + 100.0) * 2.0).clamp(0.0, 100.0) as u32;
                                         info.strength = Some(strength);
                                     }
                                 }
                             }
                         }
 
-                        // Frequency using iwconfig (fallback if needed)
+                        // Frequency using iwconfig
                         if let Ok(output) = Command::new("iwconfig").arg(&iface).output() {
                             let s = String::from_utf8_lossy(&output.stdout);
                             if let Some(pos) = s.find("Frequency:") {
                                 let sub = &s[pos + 10..];
                                 let freq_str = sub.split_whitespace().next().unwrap_or("0");
-                                info.frequency =
-                                    Some((freq_str.parse::<f32>().unwrap_or(0.0) * 1000.0) as u32);
+                                info.frequency = Some((freq_str.parse::<f32>().unwrap_or(0.0) * 1000.0) as u32);
+                            }
+                        }
+                    } else if is_wifi {
+                        // Keep previous values if not checking this time
+                    }
+
+                    // Always get IP (rarely changes, but cheap)
+                    if last_external_check == 0 {
+                        if let Ok(output) = Command::new("ip").arg("-4").arg("addr").arg("show").arg(&iface).output() {
+                            let stdout = String::from_utf8_lossy(&output.stdout);
+                            for line in stdout.lines() {
+                                let parts: Vec<&str> = line.split_whitespace().collect();
+                                if let Some(pos) = parts.iter().position(|&r| r == "inet") {
+                                    if let Some(addr) = parts.get(pos + 1) {
+                                        info.ip_cidr = addr.to_string();
+                                        break;
+                                    }
+                                }
                             }
                         }
                     }
 
-                    // IP & CIDR
-                    if let Ok(output) = Command::new("ip")
-                        .arg("-4")
-                        .arg("addr")
-                        .arg("show")
-                        .arg(&iface)
-                        .output()
-                    {
-                        let stdout = String::from_utf8_lossy(&output.stdout);
-                        for line in stdout.lines() {
-                            let parts: Vec<&str> = line.split_whitespace().collect();
-                            if let Some(pos) = parts.iter().position(|&r| r == "inet")
-                                && let Some(addr) = parts.get(pos + 1)
-                            {
-                                info.ip_cidr = addr.to_string();
-                                break;
-                            }
-                        }
-                    }
-
-                    // Bandwidth
+                    // Bandwidth (Always check every second)
                     if let Ok(dev) = fs::read_to_string("/proc/net/dev") {
                         for line in dev.lines() {
                             if line.contains(&iface) {
                                 let parts: Vec<&str> = line.split_whitespace().collect();
-                                // Parse safely to avoid index errors if the line format is weird
-                                let current_rx = parts
-                                    .get(1)
-                                    .and_then(|p| p.parse::<u64>().ok())
-                                    .unwrap_or(0);
-                                let current_tx = parts
-                                    .get(9)
-                                    .and_then(|p| p.parse::<u64>().ok())
-                                    .unwrap_or(0);
+                                let current_rx = parts.get(1).and_then(|p| p.parse::<u64>().ok()).unwrap_or(0);
+                                let current_tx = parts.get(9).and_then(|p| p.parse::<u64>().ok()).unwrap_or(0);
 
                                 if last_rx > 0 {
                                     info.down_speed = current_rx.saturating_sub(last_rx) * 8;
@@ -243,35 +228,24 @@ pub fn init(container: &gtk4::Box) {
                         }
                     }
                 } else {
-                    // No default interface
                     last_rx = 0;
                     last_tx = 0;
                     last_iface.clear();
                 }
             }
 
-            let icon = if info.conn_type == "WiFi" {
-                ""
-            } else {
-                ""
-            };
+            // Sync icon and text
+            let icon = if info.conn_type == "WiFi" { "" } else { "" };
             let display_text = if info.interface == "none" {
                 "  Disconnected".to_string()
             } else {
-                let ssid_part = info
-                    .ssid
-                    .as_deref()
-                    .map(|s| format!("{} ", s))
-                    .unwrap_or_default();
-                format!(
-                    "{}  {}{}",
-                    icon,
-                    ssid_part,
-                    info.ip_cidr.split('/').next().unwrap_or("0.0.0.0")
-                )
+                let ssid_part = info.ssid.as_deref().map(|s| format!("{} ", s)).unwrap_or_default();
+                format!("{}  {}{}", icon, ssid_part, info.ip_cidr.split('/').next().unwrap_or("0.0.0.0"))
             };
 
-            let _ = tx.send((display_text, info));
+            let _ = tx.send((display_text, info.clone()));
+            
+            last_external_check = (last_external_check + 1) % 30; // Check SSID/IP every 30s
             std::thread::sleep(Duration::from_secs(1));
         }
     });
