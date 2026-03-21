@@ -10,8 +10,9 @@ pub fn init(container: &gtk4::Box) {
     container.append(&btn);
 
     let mut sys = System::new();
+    let mut last_label = String::new();
 
-    glib::timeout_add_local(Duration::from_secs(5), move || {
+    glib::timeout_add_local(Duration::from_secs(30), move || {
         sys.refresh_memory();
         let used = sys.used_memory();
         let total = sys.total_memory();
@@ -21,7 +22,11 @@ pub fn init(container: &gtk4::Box) {
             0.0
         };
 
-        btn.set_label(&format!("  {:.0}%", perc));
+        let new_label = format!("  {:.0}%", perc);
+        if new_label != last_label {
+            btn.set_label(&new_label);
+            last_label = new_label;
+        }
         glib::ControlFlow::Continue
     });
 }

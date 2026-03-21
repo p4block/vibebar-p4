@@ -50,12 +50,27 @@ pub fn init(container: &gtk4::Box) {
     // 4. Update loop
     let p_label = popover_label.clone();
     let b_clone = button.clone();
-    glib::timeout_add_local(Duration::from_secs(1), move || {
-        // Update the button's text
-        b_clone.set_label(&format!("  {}", Local::now().format("%a %d %b %H:%M")));
+    let mut last_label = String::new();
+    let mut last_markup = String::new();
 
-        // Update the calendar inside the popover
-        p_label.set_markup(&get_calendar_markup());
+    glib::timeout_add_local(Duration::from_secs(30), move || {
+        let now = Local::now();
+        
+        // Update the button's text (only once per minute usually)
+        let new_label = format!("  {}", now.format("%a %d %b %H:%M"));
+        if new_label != last_label {
+            b_clone.set_label(&new_label);
+            last_label = new_label;
+        }
+
+        // Update the calendar inside the popover (only once per day)
+        if popover.is_visible() {
+            let new_markup = get_calendar_markup();
+            if new_markup != last_markup {
+                p_label.set_markup(&new_markup);
+                last_markup = new_markup;
+            }
+        }
 
         glib::ControlFlow::Continue
     });

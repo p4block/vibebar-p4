@@ -83,8 +83,12 @@ pub fn init(container: &gtk4::Box) {
     let p_stats = pop_stats.clone();
 
     gtk4::glib::MainContext::default().spawn_local(async move {
+        let mut last_display_text = String::new();
         while let Some((display_text, info)) = rx.recv().await {
-            label_clone.set_label(&display_text);
+            if display_text != last_display_text {
+                label_clone.set_label(&display_text);
+                last_display_text = display_text;
+            }
 
             p_title.set_markup(&format!(
                 "<b>{} @ {}</b>",
@@ -92,6 +96,13 @@ pub fn init(container: &gtk4::Box) {
                 info.conn_type
             ));
             p_ip.set_text(&format!("IP: {}", info.ip_cidr));
+            
+            // Stats always change, so no caching for popover text while it's hidden anyway
+            p_stats.set_text(&format!(
+                "Down: {:>5}bps   Up: {:>5}bps",
+                format_speed(info.down_speed),
+                format_speed(info.up_speed)
+            ));
 
             if let (Some(s), Some(f)) = (info.strength, info.frequency) {
                 p_wifi.set_visible(true);
@@ -99,12 +110,6 @@ pub fn init(container: &gtk4::Box) {
             } else {
                 p_wifi.set_visible(false);
             }
-
-            p_stats.set_text(&format!(
-                "Down: {:>5}bps   Up: {:>5}bps",
-                format_speed(info.down_speed),
-                format_speed(info.up_speed)
-            ));
         }
     });
 
@@ -248,8 +253,8 @@ pub fn init(container: &gtk4::Box) {
 
             let _ = tx.send((display_text, info.clone()));
             
-            last_external_check = (last_external_check + 1) % 30; // Check SSID/IP every 30s
-            std::thread::sleep(Duration::from_secs(1));
+            last_external_check = (last_external_check + 1) % 60; // Check SSID/IP every 120s
+            std::thread::sleep(Duration::from_secs(2));
         }
     });
 }

@@ -181,7 +181,7 @@ impl XEmbedBackend {
         // Loop for capturing and actions
         let backend_capture = backend.clone();
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(std::time::Duration::from_millis(200));
+            let mut interval = time::interval(Duration::from_secs(1));
             loop {
                 tokio::select! {
                     _ = interval.tick() => {

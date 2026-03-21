@@ -2,7 +2,7 @@ use gtk4::Button;
 use gtk4::prelude::*;
 use std::process::Command;
 use std::time::Duration;
-use sysinfo::{Components, System};
+use sysinfo::System;
 
 pub fn init(container: &gtk4::Box) {
     let btn = Button::builder().build();
@@ -14,26 +14,22 @@ pub fn init(container: &gtk4::Box) {
     });
 
     let mut sys = System::new();
-    let mut components = Components::new();
+    let mut last_label = String::new();
 
-    glib::timeout_add_local(Duration::from_secs(1), move || {
+    glib::timeout_add_local(Duration::from_secs(2), move || {
         sys.refresh_cpu_usage();
         sys.refresh_cpu_specifics(sysinfo::CpuRefreshKind::nothing().with_frequency());
-        components.refresh(false);
 
         // CPU Frequency (max)
         let max_freq = sys.cpus().iter().map(|c| c.frequency()).max().unwrap_or(0);
         let ghz = max_freq as f64 / 1000.0;
 
-        // Temperature (from first component for now)
-        let mut temp = 0.0;
-        for c in components.iter() {
-            if c.label().to_lowercase().contains("cpu") || c.label().to_lowercase().contains("core")
-            {
-                temp = c.temperature().unwrap_or(0.0);
-                break;
-            }
-        }
+        // Temperature (Direct sysfs read)
+        let temp = std::fs::read_to_string("/sys/class/hwmon/hwmon2/temp1_input")
+            .ok()
+            .and_then(|s| s.trim().parse::<f64>().ok())
+            .map(|t| t / 1000.0)
+            .unwrap_or(0.0);
 
         // Unicode bars for each core
         let bars: String = sys
@@ -54,7 +50,11 @@ pub fn init(container: &gtk4::Box) {
             })
             .collect();
 
-        btn.set_label(&format!("  {:.1}GHz {:.0}°C {}", ghz, temp, bars));
+        let new_label = format!("  {:.1}GHz {:.0}°C {}", ghz, temp, bars);
+        if new_label != last_label {
+            btn.set_label(&new_label);
+            last_label = new_label;
+        }
         glib::ControlFlow::Continue
     });
 }

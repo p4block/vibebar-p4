@@ -36,6 +36,7 @@ pub fn init(
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async move {
             tokio::time::sleep(Duration::from_secs(5)).await;
+            let mut last_label = String::new();
             loop {
                 let output = Command::new("sh").arg("-c").arg(&cmd_own).output().await;
 
@@ -47,7 +48,11 @@ pub fn init(
                         } else {
                             s.trim().to_string()
                         };
-                    let _ = tx.send(display_text);
+
+                    if display_text != last_label {
+                        let _ = tx.send(display_text.clone());
+                        last_label = display_text;
+                    }
                 }
 
                 tokio::time::sleep(Duration::from_secs(interval_secs)).await;
