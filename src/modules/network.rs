@@ -113,13 +113,15 @@ pub fn init(container: &gtk4::Box) {
         let mut last_tx = 0u64;
         let mut last_iface = String::new();
         let mut last_external_check = 0u32;
+        let mut current_ip = "0.0.0.0/0".to_string();
+        let mut current_ssid: Option<String> = None;
 
         loop {
             let mut info = NetworkInfo {
                 interface: "none".to_string(),
                 ssid: None,
                 conn_type: "Disconnected".to_string(),
-                ip_cidr: "0.0.0.0/0".to_string(),
+                ip_cidr: current_ip.clone(),
                 strength: None,
                 frequency: None,
                 up_speed: 0,
@@ -160,9 +162,7 @@ pub fn init(container: &gtk4::Box) {
                     if is_wifi && last_external_check == 0 {
                         if let Ok(output) = Command::new("iwgetid").arg("-r").output() {
                             let s = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                            if !s.is_empty() {
-                                info.ssid = Some(s);
-                            }
+                            current_ssid = if !s.is_empty() { Some(s) } else { None };
                         }
 
                         // Signal Strength & Frequency
@@ -188,11 +188,11 @@ pub fn init(container: &gtk4::Box) {
                                 info.frequency = Some((freq_str.parse::<f32>().unwrap_or(0.0) * 1000.0) as u32);
                             }
                         }
-                    } else if is_wifi {
-                        // Keep previous values if not checking this time
-                    }
+                    } 
+                    
+                    info.ssid = current_ssid.clone();
 
-                    // Always get IP (rarely changes, but cheap)
+                    // Always keep IP (rarely changes, but cheap)
                     if last_external_check == 0 {
                         if let Ok(output) = Command::new("ip").arg("-4").arg("addr").arg("show").arg(&iface).output() {
                             let stdout = String::from_utf8_lossy(&output.stdout);
@@ -200,13 +200,14 @@ pub fn init(container: &gtk4::Box) {
                                 let parts: Vec<&str> = line.split_whitespace().collect();
                                 if let Some(pos) = parts.iter().position(|&r| r == "inet") {
                                     if let Some(addr) = parts.get(pos + 1) {
-                                        info.ip_cidr = addr.to_string();
+                                        current_ip = addr.to_string();
                                         break;
                                     }
                                 }
                             }
                         }
                     }
+                    info.ip_cidr = current_ip.clone();
 
                     // Bandwidth (Always check every second)
                     if let Ok(dev) = fs::read_to_string("/proc/net/dev") {
@@ -231,6 +232,8 @@ pub fn init(container: &gtk4::Box) {
                     last_rx = 0;
                     last_tx = 0;
                     last_iface.clear();
+                    current_ip = "0.0.0.0/0".to_string();
+                    current_ssid = None;
                 }
             }
 
