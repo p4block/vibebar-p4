@@ -258,7 +258,7 @@ pub fn init(container: &gtk4::Box) {
             let _ = tx.send((display_text, info.clone()));
             
             last_external_check = (last_external_check + 1) % 60; // Check SSID/IP every 120s
-            std::thread::sleep(Duration::from_secs(2));
+            std::thread::sleep(Duration::from_secs(1));
         }
     });
 }
