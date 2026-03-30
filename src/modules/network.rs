@@ -140,10 +140,14 @@ pub fn init(container: &gtk4::Box) {
                 for line in route_content.lines().skip(1) {
                     let parts: Vec<&str> = line.split_whitespace().collect();
                     if parts.len() > 6 && (parts[1] == "00000000" || parts[2] == "00000000") {
+                        let iface = parts[0].to_string();
+                        if is_virtual_interface(&iface) {
+                            continue;
+                        }
                         let metric = parts[6].parse::<u32>().unwrap_or(u32::MAX);
                         if metric < min_metric {
                             min_metric = metric;
-                            best_iface = Some(parts[0].to_string());
+                            best_iface = Some(iface);
                         }
                     }
                 }
@@ -257,6 +261,29 @@ pub fn init(container: &gtk4::Box) {
             std::thread::sleep(Duration::from_secs(2));
         }
     });
+}
+
+fn is_virtual_interface(iface: &str) -> bool {
+    let virtual_prefixes = ["veth", "docker", "br-", "virbr", "cni", "lxc", "tun0", "tap"];
+    let virtual_names = ["lo", "docker0", "virbr0"];
+    
+    if virtual_names.contains(&iface) {
+        return true;
+    }
+    
+    for prefix in &virtual_prefixes {
+        if iface.starts_with(prefix) {
+            return true;
+        }
+    }
+    
+    if let Ok(device_type) = fs::read_to_string(format!("/sys/class/net/{}/type", iface)) {
+        if device_type.trim() == "3" {
+            return true;
+        }
+    }
+    
+    false
 }
 
 fn format_speed(bits: u64) -> String {
