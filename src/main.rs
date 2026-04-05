@@ -73,9 +73,7 @@ fn create_window(
     modules::cpu::init(&left);
 
     // Initialize modules - Center
-    // Use friend's monitor-aware signature if possible, or fallback
-    // Friend's signature: init(&Box, Option<String>)
-    modules::workspaces::init(&center, monitor.connector().map(|s| s.to_string()));
+    modules::workspaces::init(&center);
 
     modules::mpris::init(&right);
     modules::scripts::init(&right, "checkupdates | wc -l", 3600, "", None);
@@ -131,13 +129,6 @@ fn main() {
                 }
             }
 
-            // Handle monitor changes
-            monitors.connect_items_changed(move |_, _, _, _| {
-                let _ = std::process::Command::new("killall")
-                    .arg("-SIGUSR2")
-                    .arg("vibebar-p4")
-                    .spawn();
-            });
         }
 
         // Handle SIGUSR2 for restart
