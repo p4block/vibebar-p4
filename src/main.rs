@@ -48,11 +48,16 @@ fn create_window(
 
     left.set_halign(gtk4::Align::Start);
     center.set_halign(gtk4::Align::Center);
-    right.set_halign(gtk4::Align::End);
+    right.set_halign(gtk4::Align::Fill);
 
     content.set_start_widget(Some(&left));
     content.set_center_widget(Some(&center));
     content.set_end_widget(Some(&right));
+
+    // Push right modules to the right edge
+    let right_spacer = Box::new(Orientation::Horizontal, 0);
+    right_spacer.set_hexpand(true);
+    right.append(&right_spacer);
 
     window.set_child(Some(&content));
 
@@ -83,6 +88,7 @@ fn create_window(
 
     modules::mic::init(&right);
     modules::volume::init(&right);
+
     modules::clock::init(&right);
 
     if let Some(backend) = tray_backend {
@@ -128,7 +134,6 @@ fn main() {
                     create_window(app, &monitor, tray_backend.clone());
                 }
             }
-
         }
 
         // Handle SIGUSR2 for restart
