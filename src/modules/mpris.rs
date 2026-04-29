@@ -8,6 +8,12 @@ pub fn init(container: &gtk4::Box) {
     btn.add_css_class("btn");
     container.append(&btn);
 
+    btn.connect_clicked(|_| {
+        let _ = std::process::Command::new("playerctl")
+            .arg("play-pause")
+            .spawn();
+    });
+
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
     let btn_clone = btn.clone();
     gtk4::glib::MainContext::default().spawn_local(async move {
