@@ -1,5 +1,6 @@
+use crate::modules::ui;
+use gtk4::glib;
 use gtk4::prelude::*;
-use gtk4::{Button, Label, glib};
 use serde::Deserialize;
 use std::time::Duration;
 
@@ -78,14 +79,7 @@ async fn fetch_aqi() -> String {
 }
 
 pub fn init(container: &gtk4::Box) {
-    let label = Label::builder().label(" ...").build();
-    label.set_overflow(gtk4::Overflow::Visible);
-    label.set_margin_start(1);
-
-    let button = Button::new();
-    button.add_css_class("btn");
-    button.set_overflow(gtk4::Overflow::Visible);
-    button.set_child(Some(&label));
+    let (button, label) = ui::label_button(" ...");
     container.append(&button);
 
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
@@ -93,8 +87,9 @@ pub fn init(container: &gtk4::Box) {
     // UI Listener: Receives updates from the background thread
     let label = label.clone();
     glib::MainContext::default().spawn_local(async move {
+        let mut last_label = String::new();
         while let Some(text) = rx.recv().await {
-            label.set_label(&text);
+            ui::set_label(&label, &mut last_label, text);
         }
     });
 

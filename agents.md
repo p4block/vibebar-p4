@@ -27,6 +27,7 @@ cargo clippy --all-targets -- -D warnings
 - Fast UI updates usually use `glib::timeout_add_local()`.
 - Blocking or async sources use a background thread plus `tokio::sync::mpsc::unbounded_channel` back to `glib::MainContext::spawn_local()`.
 - `SIGUSR2` (12) restarts the process via `nix::unistd::execv`.
+- Startup runs a command preflight and logs missing external tools to stderr.
 
 ### Runtime
 
@@ -64,6 +65,7 @@ right:  spacer / mpris / scripts / network / aqi / mic / volume / clock / tray
 
 - Displays max CPU frequency, temperature, and per-core unicode load bars.
 - Click opens `footclient -e btop`.
+- Updates immediately on startup.
 - Updates every 2 seconds.
 - Temperature path is hard-coded: `/sys/class/hwmon/hwmon2/temp1_input`.
 
@@ -88,6 +90,7 @@ right:  spacer / mpris / scripts / network / aqi / mic / volume / clock / tray
 
 - Displays GPU busy percentage, frequency, and power.
 - Click opens `lact`.
+- Updates immediately on startup.
 - Updates every 2 seconds.
 - AMD sysfs paths are hard-coded under `/sys/class/drm/card1/device/...` and `hwmon7`.
 
@@ -100,9 +103,9 @@ right:  spacer / mpris / scripts / network / aqi / mic / volume / clock / tray
 - Displays active non-virtual default-route interface, IP, optional SSID, and traffic speed.
 - Left-click opens `footclient nmtui`.
 - Hover shows a GTK popover with connection details.
-- Reads `/proc/net/route`, `/proc/net/dev`, `/proc/net/wireless`, `ip`, `iwgetid`, and `iwconfig`.
+- Reads `/proc/net/route`, `/proc/net/dev`, `/proc/net/wireless`, `ip`, and `iwgetid`.
 - Bandwidth updates every 1 second.
-- IP/SSID/frequency refresh is gated by `last_external_check` every 60 loop iterations.
+- IP/SSID refresh is gated by `last_external_check` every 60 loop iterations.
 
 ### Workspaces
 
@@ -164,9 +167,10 @@ right:  spacer / mpris / scripts / network / aqi / mic / volume / clock / tray
 
 `init(&gtk4::Box, command: &str, interval_secs: u64, prefix: &str, click_command: Option<&str>)`
 
-- Runs shell commands through `sh -c` on a Tokio runtime in a background thread.
-- Optional click command also runs through `sh -c`.
-- Initial delay is 5 seconds.
+- Runs simple commands directly and falls back to `sh -c` only when shell syntax is present.
+- `checkupdates | wc -l` is special-cased to run `checkupdates` directly and count stdout lines.
+- Optional click command follows the same direct-or-shell path.
+- Updates immediately on startup.
 - If stdout parses as JSON, `json["text"]` is used when present.
 - Current registration: `checkupdates | wc -l` every 3600 seconds with prefix ``.
 
@@ -249,11 +253,12 @@ Niri-specific behavior:
 1. Add a module file under `src/modules/`.
 2. Export it from `src/modules/mod.rs`.
 3. Register it in `create_window()` in `src/main.rs`.
-4. Prefer existing update patterns:
+4. Use `src/modules/ui.rs` for standard `.btn` buttons and cached label updates.
+5. Prefer existing update patterns:
    - `glib::timeout_add_local()` for cheap GTK-main-loop polling.
    - background thread + channel for blocking IO.
    - Tokio runtime only when async libraries are required.
-5. Add CSS classes using the existing `.btn`/popover/menu system.
+6. Add CSS classes using the existing `.btn`/popover/menu system.
 
 Minimal template:
 
@@ -290,7 +295,6 @@ External commands used by modules:
 - `pactl`
 - `ip`
 - `iwgetid`
-- `iwconfig`
 - `checkupdates`
 
 ## Troubleshooting

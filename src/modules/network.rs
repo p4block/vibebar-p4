@@ -232,16 +232,7 @@ pub fn init(container: &gtk4::Box) {
                             }
                         }
 
-                        // Frequency using iwconfig
-                        if let Ok(output) = Command::new("iwconfig").arg(&iface).output() {
-                            let s = String::from_utf8_lossy(&output.stdout);
-                            if let Some(pos) = s.find("Frequency:") {
-                                let sub = &s[pos + 10..];
-                                let freq_str = sub.split_whitespace().next().unwrap_or("0");
-                                info.frequency =
-                                    Some((freq_str.parse::<f32>().unwrap_or(0.0) * 1000.0) as u32);
-                            }
-                        }
+                        info.frequency = None;
                     }
 
                     info.ssid = current_ssid.clone();

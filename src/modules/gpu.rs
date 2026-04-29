@@ -1,11 +1,10 @@
-use gtk4::Button;
+use crate::modules::ui;
 use gtk4::prelude::*;
 use std::process::Command;
 use std::time::Duration;
 
 pub fn init(container: &gtk4::Box) {
-    let btn = Button::builder().label("󰢮  ...").build();
-    btn.add_css_class("btn");
+    let btn = ui::button("󰢮  ...");
     container.append(&btn);
 
     btn.connect_clicked(|_| {
@@ -13,7 +12,7 @@ pub fn init(container: &gtk4::Box) {
     });
 
     let mut last_label = String::new();
-    glib::timeout_add_local(Duration::from_secs(2), move || {
+    let mut update = move || {
         let gpu_usage = std::fs::read_to_string("/sys/class/drm/card1/device/gpu_busy_percent")
             .ok()
             .and_then(|s| s.trim().parse::<u32>().ok())
@@ -32,12 +31,17 @@ pub fn init(container: &gtk4::Box) {
                 .unwrap_or(0);
         let power_watts = power_raw as f64 / 1_000_000.0;
 
-        let new_label = format!("󰢮  {}% {:.1}GHz {:.1}W", gpu_usage, freq, power_watts);
-        if new_label != last_label {
-            btn.set_label(&new_label);
-            last_label = new_label;
-        }
+        ui::set_button_label(
+            &btn,
+            &mut last_label,
+            format!("󰢮  {}% {:.1}GHz {:.1}W", gpu_usage, freq, power_watts),
+        );
+    };
 
+    update();
+
+    glib::timeout_add_local(Duration::from_secs(2), move || {
+        update();
         glib::ControlFlow::Continue
     });
 }

@@ -9,6 +9,7 @@ pub mod network;
 pub mod ram;
 pub mod scripts;
 pub mod tray;
+pub mod ui;
 pub mod volume;
 pub mod workspaces;
 pub mod xembed;

@@ -5,7 +5,10 @@ pub(super) fn run(
     rx_ws: tokio::sync::mpsc::UnboundedReceiver<WorkspaceTarget>,
     tx: tokio::sync::mpsc::UnboundedSender<Vec<WorkspaceButtonData>>,
 ) {
-    let rt = match tokio::runtime::Runtime::new() {
+    let rt = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
         Ok(rt) => rt,
         Err(e) => {
             eprintln!("[workspaces] failed to create sway runtime: {}", e);

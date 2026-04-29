@@ -1,5 +1,6 @@
+use crate::modules::ui;
 use gtk4::prelude::*;
-use gtk4::{Button, EventControllerScroll, EventControllerScrollFlags, Label};
+use gtk4::{EventControllerScroll, EventControllerScrollFlags};
 use pulse::context::subscribe::{Facility, InterestMaskSet};
 use pulse::context::{Context, FlagSet as ContextFlagSet};
 use pulse::mainloop::standard::Mainloop;
@@ -7,14 +8,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 pub fn init(container: &gtk4::Box) {
-    let label = Label::builder().label(" ...%").build();
-    label.set_overflow(gtk4::Overflow::Visible);
-    label.set_margin_start(1);
-
-    let btn = Button::new();
-    btn.add_css_class("btn");
-    btn.set_overflow(gtk4::Overflow::Visible);
-    btn.set_child(Some(&label));
+    let (btn, label) = ui::label_button(" ...%");
     container.append(&btn);
 
     // Use default flags to receive raw high-resolution scroll events.
@@ -65,8 +59,9 @@ pub fn init(container: &gtk4::Box) {
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
     let label = label.clone();
     gtk4::glib::MainContext::default().spawn_local(async move {
+        let mut last_label = String::new();
         while let Some(vol) = rx.recv().await {
-            label.set_label(&vol);
+            ui::set_label(&label, &mut last_label, vol);
         }
     });
 

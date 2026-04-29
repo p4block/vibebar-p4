@@ -1,12 +1,11 @@
-use gtk4::Button;
+use crate::modules::ui;
 use gtk4::prelude::*;
 use std::process::Command;
 use std::time::Duration;
 use sysinfo::System;
 
 pub fn init(container: &gtk4::Box) {
-    let btn = Button::builder().build();
-    btn.add_css_class("btn");
+    let btn = ui::empty_button();
     container.append(&btn);
 
     btn.connect_clicked(|_| {
@@ -16,7 +15,7 @@ pub fn init(container: &gtk4::Box) {
     let mut sys = System::new();
     let mut last_label = String::new();
 
-    glib::timeout_add_local(Duration::from_secs(2), move || {
+    let mut update = move || {
         sys.refresh_cpu_usage();
         sys.refresh_cpu_specifics(sysinfo::CpuRefreshKind::nothing().with_frequency());
 
@@ -50,11 +49,17 @@ pub fn init(container: &gtk4::Box) {
             })
             .collect();
 
-        let new_label = format!("  {:.1}GHz {:.0}°C {}", ghz, temp, bars);
-        if new_label != last_label {
-            btn.set_label(&new_label);
-            last_label = new_label;
-        }
+        ui::set_button_label(
+            &btn,
+            &mut last_label,
+            format!("  {:.1}GHz {:.0}°C {}", ghz, temp, bars),
+        );
+    };
+
+    update();
+
+    glib::timeout_add_local(Duration::from_secs(2), move || {
+        update();
         glib::ControlFlow::Continue
     });
 }

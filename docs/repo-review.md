@@ -28,6 +28,7 @@ Full-repo formatting is clean.
 - The input region is clipped to the bottom 24px so the popover area remains click-through.
 - A global Tokio runtime is created and leaked before module initialization.
 - Modules either poll on the GTK main loop, spawn blocking threads, or use a background Tokio runtime/thread and send data back to GTK.
+- Startup preflights required external commands and logs missing ones.
 
 ## Findings
 
@@ -71,12 +72,27 @@ Modules spawn external commands without availability checks:
 - `pactl`
 - `ip`
 - `iwgetid`
-- `iwconfig`
 - `checkupdates`
 
-Impact: missing commands silently fail or leave modules degraded.
+Impact: missing commands are logged at startup; module behavior may still degrade if a command disappears later.
 
 Recommended follow-up: centralize command spawning and log failures consistently.
+
+### Resolved: Polling Modules Delayed First Updates
+
+RAM, CPU, GPU, and the scripts module now perform an initial update during module startup instead of waiting for their first timer interval.
+
+### Resolved: Script Command Always Used A Shell
+
+The scripts module now runs simple commands directly. The `checkupdates | wc -l` registration is special-cased to run `checkupdates` directly and count lines in-process.
+
+### Resolved: Network Used `iwconfig`
+
+`network.rs` no longer shells out to `iwconfig`; it keeps SSID/signal/IP/speed and omits WiFi frequency rather than invoking that legacy tool.
+
+### Resolved: Shared Button Helpers
+
+`src/modules/ui.rs` now centralizes standard `.btn` creation, label-button construction, and cached label updates for modules that use it.
 
 ### Resolved: GPU Click Handler Was Ambiguous
 

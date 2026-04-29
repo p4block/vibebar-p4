@@ -109,9 +109,10 @@ fn main() {
         // Load the user's restored style.css
         provider.load_from_data(include_str!("style.css"));
 
-        let tray_backend = if let Ok(rt) = tokio::runtime::Runtime::new() {
-            let rt = std::boxed::Box::leak(std::boxed::Box::new(rt));
-            std::mem::forget(rt.enter());
+        let tray_backend = if let Ok(rt) = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+        {
             rt.block_on(async { modules::tray::TrayBackend::new().await })
         } else {
             None
