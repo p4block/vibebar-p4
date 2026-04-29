@@ -17,33 +17,47 @@ pub fn init(container: &gtk4::Box) {
     });
 
     std::thread::spawn(move || {
-        let finder = PlayerFinder::new().unwrap();
+        let Ok(finder) = PlayerFinder::new() else {
+            return;
+        };
+        let mut last_text = String::new();
         loop {
-            if let Ok(player) = finder.find_active() {
+            let text = if let Ok(player) = finder.find_active() {
                 if let Ok(metadata) = player.get_metadata() {
                     let artist = metadata.artists().map(|a| a.join(", ")).unwrap_or_default();
                     let title = metadata.title().unwrap_or_default();
-                    let status = player.get_playback_status().unwrap();
+                    let status = player
+                        .get_playback_status()
+                        .unwrap_or(mpris::PlaybackStatus::Stopped);
                     let icon = match status {
                         mpris::PlaybackStatus::Playing => "",
                         mpris::PlaybackStatus::Paused => "",
                         _ => "⏹",
                     };
-                    let mut text = format!("{} {} - {}", icon, artist, title);
-                if text.chars().count() > 60 {
-                    while text.chars().count() > 57 {
-                        text.pop();
-                    }
-                    text.push_str("...");
-                }
-                let _ = tx.send(text);
+                    truncate_text(format!("{} {} - {}", icon, artist, title), 60)
                 } else {
-                    let _ = tx.send("".to_string());
+                    String::new()
                 }
             } else {
-                let _ = tx.send("".to_string());
+                String::new()
+            };
+
+            if text != last_text {
+                let _ = tx.send(text.clone());
+                last_text = text;
             }
+
             std::thread::sleep(Duration::from_secs(1));
         }
     });
+}
+
+fn truncate_text(text: String, max_chars: usize) -> String {
+    if text.chars().count() <= max_chars {
+        return text;
+    }
+
+    let mut truncated: String = text.chars().take(max_chars.saturating_sub(3)).collect();
+    truncated.push_str("...");
+    truncated
 }

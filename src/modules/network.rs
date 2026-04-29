@@ -1,7 +1,9 @@
 use gtk4::prelude::*;
 use gtk4::{Box, Button, EventControllerMotion, GestureClick, Label, Orientation, Popover};
+use std::cell::Cell;
 use std::fs;
 use std::process::Command;
+use std::rc::Rc;
 use std::time::Duration;
 
 #[derive(Clone, Debug)]
@@ -21,11 +23,11 @@ pub fn init(container: &gtk4::Box) {
     module_box.set_widget_name("network-module");
     container.append(&module_box);
 
-    let label = Label::builder().label("  ...").build();
+    let label = Label::builder().label(" ...").build();
     let btn = Button::new();
     btn.add_css_class("btn");
     btn.set_child(Some(&label));
-    container.append(&btn);
+    module_box.append(&btn);
 
     let popover = Popover::builder()
         .css_classes(vec!["standard-popover".to_string()])
@@ -61,22 +63,57 @@ pub fn init(container: &gtk4::Box) {
     });
     btn.add_controller(click_gesture);
 
-    // Hover gesture for popover
+    // Hover gesture for popover. Track both widgets because GTK may emit leave
+    // on the button when the popover maps or resizes under the pointer.
+    let over_button = Rc::new(Cell::new(false));
+    let over_popover = Rc::new(Cell::new(false));
+
     let motion_controller = EventControllerMotion::new();
     let p_enter = popover.clone();
+    let over_button_enter = over_button.clone();
     motion_controller.connect_enter(move |_, _, _| {
+        over_button_enter.set(true);
         p_enter.popup();
     });
+
     let p_leave = popover.clone();
+    let over_button_leave = over_button.clone();
+    let over_popover_leave = over_popover.clone();
     motion_controller.connect_leave(move |_| {
-        p_leave.popdown();
+        over_button_leave.set(false);
+        schedule_popdown(
+            p_leave.clone(),
+            over_button_leave.clone(),
+            over_popover_leave.clone(),
+        );
     });
     btn.add_controller(motion_controller);
 
+    let popover_motion = EventControllerMotion::new();
+    let p_popover_enter = popover.clone();
+    let over_popover_enter = over_popover.clone();
+    popover_motion.connect_enter(move |_, _, _| {
+        over_popover_enter.set(true);
+        p_popover_enter.popup();
+    });
+
+    let p_popover_leave = popover.clone();
+    let over_button_popover_leave = over_button.clone();
+    let over_popover_leave = over_popover.clone();
+    popover_motion.connect_leave(move |_| {
+        over_popover_leave.set(false);
+        schedule_popdown(
+            p_popover_leave.clone(),
+            over_button_popover_leave.clone(),
+            over_popover_leave.clone(),
+        );
+    });
+    popover.add_controller(popover_motion);
+
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<(String, NetworkInfo)>();
 
-    let _btn_clone = btn.clone();
     let label_clone = label.clone();
+    let popover_clone = popover.clone();
     let p_title = pop_title.clone();
     let p_ip = pop_ip.clone();
     let p_wifi = pop_wifi.clone();
@@ -90,25 +127,25 @@ pub fn init(container: &gtk4::Box) {
                 last_display_text = display_text;
             }
 
-            p_title.set_markup(&format!(
-                "<b>{} @ {}</b>",
-                info.ssid.as_deref().unwrap_or("Internet"),
-                info.conn_type
-            ));
-            p_ip.set_text(&format!("IP: {}", info.ip_cidr));
-            
-            // Stats always change, so no caching for popover text while it's hidden anyway
-            p_stats.set_text(&format!(
-                "Down: {:>5}bps   Up: {:>5}bps",
-                format_speed(info.down_speed),
-                format_speed(info.up_speed)
-            ));
+            if popover_clone.is_visible() {
+                p_title.set_markup(&format!(
+                    "<b>{} @ {}</b>",
+                    info.ssid.as_deref().unwrap_or("Internet"),
+                    info.conn_type
+                ));
+                p_ip.set_text(&format!("IP: {}", info.ip_cidr));
+                p_stats.set_text(&format!(
+                    "Down: {:>5}bps   Up: {:>5}bps",
+                    format_speed(info.down_speed),
+                    format_speed(info.up_speed)
+                ));
 
-            if let (Some(s), Some(f)) = (info.strength, info.frequency) {
-                p_wifi.set_visible(true);
-                p_wifi.set_text(&format!("Strength: {}%  Freq: {}MHz", s, f));
-            } else {
-                p_wifi.set_visible(false);
+                if let (Some(s), Some(f)) = (info.strength, info.frequency) {
+                    p_wifi.set_visible(true);
+                    p_wifi.set_text(&format!("Strength: {}%  Freq: {}MHz", s, f));
+                } else {
+                    p_wifi.set_visible(false);
+                }
             }
         }
     });
@@ -159,14 +196,19 @@ pub fn init(container: &gtk4::Box) {
                         last_tx = 0;
                         last_iface = iface.clone();
                         // Force info update on change
-                        last_external_check = 0; 
+                        last_external_check = 0;
                     }
 
                     info.interface = iface.clone();
-                    let is_wifi = fs::metadata(format!("/sys/class/net/{}/wireless", iface)).is_ok()
+                    let is_wifi = fs::metadata(format!("/sys/class/net/{}/wireless", iface))
+                        .is_ok()
                         || fs::metadata(format!("/sys/class/net/{}/phy80211", iface)).is_ok();
 
-                    info.conn_type = if is_wifi { "WiFi".to_string() } else { "Ethernet".to_string() };
+                    info.conn_type = if is_wifi {
+                        "WiFi".to_string()
+                    } else {
+                        "Ethernet".to_string()
+                    };
 
                     if is_wifi && last_external_check == 0 {
                         if let Ok(output) = Command::new("iwgetid").arg("-r").output() {
@@ -180,8 +222,10 @@ pub fn init(container: &gtk4::Box) {
                                 if line.contains(&iface) {
                                     let parts: Vec<&str> = line.split_whitespace().collect();
                                     if let Some(lvl) = parts.get(3) {
-                                        let level = lvl.trim_end_matches('.').parse::<f32>().unwrap_or(0.0);
-                                        let strength = ((level + 100.0) * 2.0).clamp(0.0, 100.0) as u32;
+                                        let level =
+                                            lvl.trim_end_matches('.').parse::<f32>().unwrap_or(0.0);
+                                        let strength =
+                                            ((level + 100.0) * 2.0).clamp(0.0, 100.0) as u32;
                                         info.strength = Some(strength);
                                     }
                                 }
@@ -194,48 +238,43 @@ pub fn init(container: &gtk4::Box) {
                             if let Some(pos) = s.find("Frequency:") {
                                 let sub = &s[pos + 10..];
                                 let freq_str = sub.split_whitespace().next().unwrap_or("0");
-                                info.frequency = Some((freq_str.parse::<f32>().unwrap_or(0.0) * 1000.0) as u32);
+                                info.frequency =
+                                    Some((freq_str.parse::<f32>().unwrap_or(0.0) * 1000.0) as u32);
                             }
                         }
-                    } 
-                    
+                    }
+
                     info.ssid = current_ssid.clone();
 
-                    // Always keep IP (rarely changes, but cheap)
-                    if last_external_check == 0 {
-                        if let Ok(output) = Command::new("ip").arg("-4").arg("addr").arg("show").arg(&iface).output() {
-                            let stdout = String::from_utf8_lossy(&output.stdout);
-                            for line in stdout.lines() {
-                                let parts: Vec<&str> = line.split_whitespace().collect();
-                                if let Some(pos) = parts.iter().position(|&r| r == "inet") {
-                                    if let Some(addr) = parts.get(pos + 1) {
-                                        current_ip = addr.to_string();
-                                        break;
-                                    }
-                                }
+                    if last_external_check == 0
+                        && let Ok(output) = Command::new("ip")
+                            .arg("-4")
+                            .arg("addr")
+                            .arg("show")
+                            .arg(&iface)
+                            .output()
+                    {
+                        let stdout = String::from_utf8_lossy(&output.stdout);
+                        for line in stdout.lines() {
+                            let parts: Vec<&str> = line.split_whitespace().collect();
+                            if let Some(pos) = parts.iter().position(|&r| r == "inet")
+                                && let Some(addr) = parts.get(pos + 1)
+                            {
+                                current_ip = addr.to_string();
+                                break;
                             }
                         }
                     }
                     info.ip_cidr = current_ip.clone();
 
-                    // Bandwidth (Always check every second)
-                    if let Ok(dev) = fs::read_to_string("/proc/net/dev") {
-                        for line in dev.lines() {
-                            if line.contains(&iface) {
-                                let parts: Vec<&str> = line.split_whitespace().collect();
-                                let current_rx = parts.get(1).and_then(|p| p.parse::<u64>().ok()).unwrap_or(0);
-                                let current_tx = parts.get(9).and_then(|p| p.parse::<u64>().ok()).unwrap_or(0);
-
-                                if last_rx > 0 {
-                                    info.down_speed = current_rx.saturating_sub(last_rx) * 8;
-                                    info.up_speed = current_tx.saturating_sub(last_tx) * 8;
-                                }
-
-                                last_rx = current_rx;
-                                last_tx = current_tx;
-                                break;
-                            }
+                    if let Some((current_rx, current_tx)) = read_interface_bytes(&iface) {
+                        if last_rx > 0 {
+                            info.down_speed = current_rx.saturating_sub(last_rx) * 8;
+                            info.up_speed = current_tx.saturating_sub(last_tx) * 8;
                         }
+
+                        last_rx = current_rx;
+                        last_tx = current_tx;
                     }
                 } else {
                     last_rx = 0;
@@ -247,42 +286,82 @@ pub fn init(container: &gtk4::Box) {
             }
 
             // Sync icon and text
-            let icon = if info.conn_type == "WiFi" { "" } else { "" };
-            let display_text = if info.interface == "none" {
-                "  Disconnected".to_string()
+            let icon = if info.conn_type == "WiFi" {
+                ""
             } else {
-                let ssid_part = info.ssid.as_deref().map(|s| format!("{} ", s)).unwrap_or_default();
-                format!("{}  {}{}", icon, ssid_part, info.ip_cidr.split('/').next().unwrap_or("0.0.0.0"))
+                ""
+            };
+            let display_text = if info.interface == "none" {
+                " Disconnected".to_string()
+            } else {
+                let ssid_part = info
+                    .ssid
+                    .as_deref()
+                    .map(|s| format!("{} ", s))
+                    .unwrap_or_default();
+                format!(
+                    "{} {}{}",
+                    icon,
+                    ssid_part,
+                    info.ip_cidr.split('/').next().unwrap_or("0.0.0.0")
+                )
             };
 
-            let _ = tx.send((display_text, info.clone()));
-            
+            let _ = tx.send((display_text, info));
+
             last_external_check = (last_external_check + 1) % 60; // Check SSID/IP every 120s
             std::thread::sleep(Duration::from_secs(1));
         }
     });
 }
 
+fn schedule_popdown(popover: Popover, over_button: Rc<Cell<bool>>, over_popover: Rc<Cell<bool>>) {
+    gtk4::glib::timeout_add_local_once(Duration::from_millis(250), move || {
+        if !over_button.get() && !over_popover.get() {
+            popover.popdown();
+        }
+    });
+}
+
+fn read_interface_bytes(iface: &str) -> Option<(u64, u64)> {
+    let dev = fs::read_to_string("/proc/net/dev").ok()?;
+    for line in dev.lines().skip(2) {
+        let (name, stats) = line.split_once(':')?;
+        if name.trim() != iface {
+            continue;
+        }
+
+        let mut parts = stats.split_whitespace();
+        let rx = parts.next()?.parse::<u64>().ok()?;
+        let tx = parts.nth(7)?.parse::<u64>().ok()?;
+        return Some((rx, tx));
+    }
+
+    None
+}
+
 fn is_virtual_interface(iface: &str) -> bool {
-    let virtual_prefixes = ["veth", "docker", "br-", "virbr", "cni", "lxc", "tun0", "tap"];
+    let virtual_prefixes = [
+        "veth", "docker", "br-", "virbr", "cni", "lxc", "tun0", "tap",
+    ];
     let virtual_names = ["lo", "docker0", "virbr0"];
-    
+
     if virtual_names.contains(&iface) {
         return true;
     }
-    
+
     for prefix in &virtual_prefixes {
         if iface.starts_with(prefix) {
             return true;
         }
     }
-    
-    if let Ok(device_type) = fs::read_to_string(format!("/sys/class/net/{}/type", iface)) {
-        if device_type.trim() == "3" {
-            return true;
-        }
+
+    if let Ok(device_type) = fs::read_to_string(format!("/sys/class/net/{}/type", iface))
+        && device_type.trim() == "3"
+    {
+        return true;
     }
-    
+
     false
 }
 

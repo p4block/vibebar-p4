@@ -12,10 +12,9 @@ Useful checks:
 
 ```bash
 cargo check
-rustfmt --check --edition 2024 src/modules/xembed.rs src/modules/tray.rs
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
 ```
-
-Full `cargo fmt --check` may report pre-existing formatting drift in modules outside the current change scope.
 
 ## Architecture
 
@@ -88,8 +87,7 @@ right:  spacer / mpris / scripts / network / aqi / mic / volume / clock / tray
 `init(&gtk4::Box)`
 
 - Displays GPU busy percentage, frequency, and power.
-- `connect_clicked` opens `lact`.
-- A separate left-click `GestureClick` currently opens `footclient -e btop`; because the gesture is not added to the button in the current code, the reliable click behavior is the `lact` `connect_clicked` path.
+- Click opens `lact`.
 - Updates every 2 seconds.
 - AMD sysfs paths are hard-coded under `/sys/class/drm/card1/device/...` and `hwmon7`.
 
@@ -167,9 +165,9 @@ right:  spacer / mpris / scripts / network / aqi / mic / volume / clock / tray
 `init(&gtk4::Box, command: &str, interval_secs: u64, prefix: &str, click_command: Option<&str>)`
 
 - Runs shell commands through `sh -c` on a Tokio runtime in a background thread.
+- Optional click command also runs through `sh -c`.
 - Initial delay is 5 seconds.
 - If stdout parses as JSON, `json["text"]` is used when present.
-- `_click_command` is currently unused.
 - Current registration: `checkupdates | wc -l` every 3600 seconds with prefix ``.
 
 #### `aqi`
@@ -335,9 +333,7 @@ External commands used by modules:
 ## Known Code Review Notes
 
 - Several modules have hard-coded machine-specific paths or commands (`hwmon2`, `card1`, `hwmon7`, `/mnt/storage`, `footclient`, `checkupdates`).
-- `network.rs`, `mpris.rs`, and other modules have formatting drift relative to `rustfmt`.
-- `gpu.rs` creates a left-click gesture for `btop` but does not add that controller to the button; `connect_clicked` opens `lact`.
-- `scripts.rs` accepts `click_command` but ignores it.
+- Full-repo `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings` are expected to pass.
 - `workspaces.rs` keeps separate niri and sway IPC paths; changes should preserve both unless the user explicitly scopes support to one compositor.
 
 ## License

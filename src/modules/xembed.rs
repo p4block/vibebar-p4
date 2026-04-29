@@ -64,12 +64,12 @@ impl XEmbedBackend {
         let mut visual_id = screen.root_visual;
         let mut depth = screen.root_depth;
         for d in &screen.allowed_depths {
-            if d.depth == 32 {
-                if let Some(v) = d.visuals.first() {
-                    visual_id = v.visual_id;
-                    depth = 32;
-                    break;
-                }
+            if d.depth == 32
+                && let Some(v) = d.visuals.first()
+            {
+                visual_id = v.visual_id;
+                depth = 32;
+                break;
             }
         }
 

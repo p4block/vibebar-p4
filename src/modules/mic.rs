@@ -1,5 +1,5 @@
-use gtk4::prelude::*;
 use gtk4::Button;
+use gtk4::prelude::*;
 use pulse::context::subscribe::{Facility, InterestMaskSet};
 use pulse::context::{Context, FlagSet as ContextFlagSet};
 use pulse::mainloop::standard::Mainloop;

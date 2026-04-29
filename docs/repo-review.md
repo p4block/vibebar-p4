@@ -10,15 +10,15 @@ The repository builds, but it is a personal-machine-oriented bar with several ha
 
 ```bash
 cargo check
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
 ```
 
-Result: passes.
+Result: all pass after the cleanup pass.
 
 ## Formatting
 
-`rustfmt --check --edition 2024 src/modules/xembed.rs src/modules/tray.rs` passes after the recent tray work.
-
-Full-repo formatting is not clean. Existing modules such as `network.rs`, `mpris.rs`, `clock.rs`, and `disk.rs` contain rustfmt drift. Treat repo-wide formatting as a separate cleanup to avoid mixing mechanical churn with behavior changes.
+Full-repo formatting is clean.
 
 ## Current Architecture
 
@@ -58,7 +58,7 @@ Several modules assume this host's device layout:
 
 Impact: behavior will degrade or display zeros on other machines.
 
-Recommended follow-up: move these into a small config layer or environment-variable overrides.
+Decision: this is intentional for this machine. Configurability is not a current goal.
 
 ### Medium: Command Assumptions
 
@@ -78,37 +78,27 @@ Impact: missing commands silently fail or leave modules degraded.
 
 Recommended follow-up: centralize command spawning and log failures consistently.
 
-### Medium: GPU Click Handler Is Ambiguous
+### Resolved: GPU Click Handler Was Ambiguous
 
-`gpu.rs` has `btn.connect_clicked()` opening `lact`. It also creates a left-click `GestureClick` intended to open `btop`, but the controller is not added to the button.
+`gpu.rs` now has a single click path: click opens `lact`. The unused `GestureClick` path that attempted to open `btop` was removed.
 
-Impact: docs that say left-click opens `btop` are wrong; reliable current behavior is `lact`.
+### Resolved: `scripts.rs` Ignored `click_command`
 
-Recommended follow-up: decide on desired click behavior and either add the gesture controller or remove the dead gesture block.
+`scripts.rs` now wires `click_command` to a left-click `sh -c` spawn when one is provided.
 
-### Medium: `scripts.rs` Ignores `click_command`
+### Resolved: Network Module Had An Unused Container
 
-The public function accepts `click_command: Option<&str>`, but the argument is named `_click_command` and not used.
+`network.rs` now appends its button into `module_box` instead of appending the box and button as siblings.
 
-Impact: docs or callers may assume click support exists when it does not.
+### Resolved: Dead Uncompiled Module Files
 
-Recommended follow-up: implement click command handling or remove the parameter.
-
-### Low: Network Module Has An Unused Container
-
-`network.rs` creates `module_box` and appends it to the container, but the actual button is appended directly to the same container instead of inside `module_box`.
-
-Impact: likely harmless extra empty widget.
-
-Recommended follow-up: remove `module_box` or append the button to it.
+Removed stale unexported files `src/modules/icon_label.rs` and `src/modules/ip.rs`.
 
 ### Low: AQI Token Is Hard-Coded
 
 `aqi.rs` includes a WAQI token and city constant in source.
 
-Impact: personal token/config cannot be rotated or changed without recompilation.
-
-Recommended follow-up: read token/city from environment variables or a config file.
+Decision: this is intentional for this machine. Configurability is not a current goal.
 
 ## Documentation Updates Made
 
@@ -116,10 +106,9 @@ Recommended follow-up: read token/city from environment variables or a config fi
 - Rewrote `docs/ghost-window-investigation.md` as a resolved compatibility note.
 - Added this repo review note.
 - Restored and documented sway workspace support after the initial review caught the mismatch.
+- Updated this review after the cleanup pass resolved formatting, clippy, dead module files, the GPU click ambiguity, `scripts` click command handling, and the network container issue.
 
 ## Suggested Next Cleanup Order
 
-1. Configurize machine-specific paths and commands.
-2. Fix or remove dead click parameters/gestures.
-3. Add a lightweight manual test checklist for niri and sway sessions.
-4. Run repo-wide rustfmt in a dedicated formatting-only commit.
+1. Centralize command spawning/logging if silent failures become annoying.
+2. Add a lightweight manual test checklist for niri and sway sessions.

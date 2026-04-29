@@ -55,7 +55,7 @@ pub fn init(container: &gtk4::Box) {
 
     glib::timeout_add_local(Duration::from_secs(30), move || {
         let now = Local::now();
-        
+
         // Update the button's text (only once per minute usually)
         let new_label = format!("  {}", now.format("%a %d %b %H:%M"));
         if new_label != last_label {
@@ -90,19 +90,7 @@ fn get_calendar_markup() -> String {
             let month_date = now.with_day(1).unwrap().with_month(month).unwrap();
             let month_name = month_date.format("%B").to_string();
 
-            let padding = (20 - month_name.len()) / 2;
-            lines[0].push_str(&format!(
-                "{:>width$}{:<width$}",
-                "",
-                month_name,
-                width = padding
-            ));
-            if !month_name.len().wrapping_rem(2) == 0 && !lines[0].len().wrapping_rem(20) == 0 {
-                lines[0].push(' ');
-            }
-            while lines[0].len() % 22 != 0 {
-                lines[0].push(' ');
-            }
+            lines[0].push_str(&format!("{:^20}  ", month_name));
 
             lines[1].push_str("<span color='#ffcc66'>Mo Tu We Th Fr Sa Su</span>  ");
 

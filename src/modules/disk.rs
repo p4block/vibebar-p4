@@ -13,9 +13,9 @@ pub fn init(container: &gtk4::Box, path: &str, label_prefix: &str) {
     let path_clone = path.to_string();
     let prefix_clone = label_prefix.to_string();
     let btn_clone = btn.clone();
-    
+
     let last_label = std::rc::Rc::new(std::cell::RefCell::new(String::new()));
-    
+
     let update = {
         let last_label = last_label.clone();
         let path_clone = path_clone.clone();

@@ -1,5 +1,6 @@
-use gtk4::Button;
 use gtk4::prelude::*;
+use gtk4::{Button, GestureClick};
+use std::process::Command as StdCommand;
 use std::time::Duration;
 use tokio::process::Command;
 
@@ -8,13 +9,23 @@ pub fn init(
     command: &str,
     interval_secs: u64,
     prefix: &str,
-    _click_command: Option<&str>,
+    click_command: Option<&str>,
 ) {
     let button = Button::builder().label(format!("{} ...", prefix)).build();
 
     button.add_css_class("btn");
 
     container.append(&button);
+
+    if let Some(click_command) = click_command {
+        let click_command = click_command.to_string();
+        let gesture = GestureClick::new();
+        gesture.set_button(1);
+        gesture.connect_pressed(move |_, _, _, _| {
+            let _ = StdCommand::new("sh").arg("-c").arg(&click_command).spawn();
+        });
+        button.add_controller(gesture);
+    }
 
     let cmd_own = command.to_string();
     let prefix_own = prefix.to_string();

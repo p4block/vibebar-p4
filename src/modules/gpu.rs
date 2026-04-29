@@ -1,5 +1,5 @@
+use gtk4::Button;
 use gtk4::prelude::*;
-use gtk4::{Button, GestureClick};
 use std::process::Command;
 use std::time::Duration;
 
@@ -12,11 +12,6 @@ pub fn init(container: &gtk4::Box) {
         let _ = Command::new("lact").spawn();
     });
 
-    let gesture = GestureClick::new();
-    gesture.set_button(1);
-    gesture.connect_pressed(|_, _, _, _| {
-        let _ = Command::new("footclient").arg("-e").arg("btop").spawn();
-    });
     let mut last_label = String::new();
     glib::timeout_add_local(Duration::from_secs(2), move || {
         let gpu_usage = std::fs::read_to_string("/sys/class/drm/card1/device/gpu_busy_percent")
@@ -37,10 +32,7 @@ pub fn init(container: &gtk4::Box) {
                 .unwrap_or(0);
         let power_watts = power_raw as f64 / 1_000_000.0;
 
-        let new_label = format!(
-            "󰢮  {}% {:.1}GHz {:.1}W",
-            gpu_usage, freq, power_watts
-        );
+        let new_label = format!("󰢮  {}% {:.1}GHz {:.1}W", gpu_usage, freq, power_watts);
         if new_label != last_label {
             btn.set_label(&new_label);
             last_label = new_label;

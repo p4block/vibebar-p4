@@ -35,6 +35,10 @@ window {
     min-height: 24px;
 }
 
+.btn label {
+    padding: 0 1px;
+}
+
 .btn:hover {
     background-color: rgba(255, 255, 255, 0.1);
 }

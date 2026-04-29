@@ -1,11 +1,11 @@
 use gtk4::prelude::*;
-use gtk4::{Button, glib};
+use gtk4::{Button, Label, glib};
 use serde::Deserialize;
 use std::time::Duration;
 
 const TOKEN: &str = "eede2aac49a4b420091a181c837a32f7609022dc";
 const CITY: &str = "Murcia";
-const UPDATE_INTERVAL_MINS: u64 = 30; // AQI doesn't change fast
+const UPDATE_INTERVAL_MINS: u64 = 30; // AQI does not change fast.
 
 #[derive(Deserialize)]
 struct WaqiResponse {
@@ -31,12 +31,11 @@ struct LatLng {
 
 fn get_icon(aqi: i32) -> &'static str {
     match aqi {
-        0..=49 => "",
-        50..=99 => "",
-        100..=149 => "",
-        150..=199 => "",
-        200..=299 => "",
-        _ => "",
+        0..=99 => "",
+        100..=149 => "",
+        150..=199 => "",
+        200..=299 => "",
+        _ => "",
     }
 }
 
@@ -59,39 +58,43 @@ async fn fetch_aqi() -> String {
                     loc.location.lat, loc.location.lng, TOKEN
                 )
             } else {
-                return "󰴔 LocErr".to_string();
+                return " LocErr".to_string();
             }
         } else {
-            return "󰴔 NetErr".to_string();
+            return " NetErr".to_string();
         }
     };
 
     // 2. Fetch AQI
-    let aqi_req = client.get(url).send().await;
-    if let Ok(resp) = aqi_req {
-        if let Ok(json) = resp.json::<WaqiResponse>().await {
-            if json.status == "ok" {
-                if let Some(data) = json.data {
-                    return format!("{}  {}", get_icon(data.aqi), data.aqi);
-                }
-            }
-        }
+    if let Ok(resp) = client.get(url).send().await
+        && let Ok(json) = resp.json::<WaqiResponse>().await
+        && json.status == "ok"
+        && let Some(data) = json.data
+    {
+        return format!("{}  {}", get_icon(data.aqi), data.aqi);
     }
-    "󰴔 Error".to_string()
+
+    " Error".to_string()
 }
 
 pub fn init(container: &gtk4::Box) {
-    let button = Button::builder().label("󰴔 ...").build();
+    let label = Label::builder().label(" ...").build();
+    label.set_overflow(gtk4::Overflow::Visible);
+    label.set_margin_start(1);
+
+    let button = Button::new();
     button.add_css_class("btn");
+    button.set_overflow(gtk4::Overflow::Visible);
+    button.set_child(Some(&label));
     container.append(&button);
 
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
 
     // UI Listener: Receives updates from the background thread
-    let b = button.clone();
+    let label = label.clone();
     glib::MainContext::default().spawn_local(async move {
         while let Some(text) = rx.recv().await {
-            b.set_label(&text);
+            label.set_label(&text);
         }
     });
 

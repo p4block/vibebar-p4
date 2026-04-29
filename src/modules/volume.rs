@@ -1,5 +1,5 @@
 use gtk4::prelude::*;
-use gtk4::{Button, EventControllerScroll, EventControllerScrollFlags};
+use gtk4::{Button, EventControllerScroll, EventControllerScrollFlags, Label};
 use pulse::context::subscribe::{Facility, InterestMaskSet};
 use pulse::context::{Context, FlagSet as ContextFlagSet};
 use pulse::mainloop::standard::Mainloop;
@@ -7,8 +7,14 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 pub fn init(container: &gtk4::Box) {
-    let btn = Button::builder().label(" ...%").build();
+    let label = Label::builder().label(" ...%").build();
+    label.set_overflow(gtk4::Overflow::Visible);
+    label.set_margin_start(1);
+
+    let btn = Button::new();
     btn.add_css_class("btn");
+    btn.set_overflow(gtk4::Overflow::Visible);
+    btn.set_child(Some(&label));
     container.append(&btn);
 
     // Use default flags to receive raw high-resolution scroll events.
@@ -57,10 +63,10 @@ pub fn init(container: &gtk4::Box) {
     });
 
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
-    let b = btn.clone();
+    let label = label.clone();
     gtk4::glib::MainContext::default().spawn_local(async move {
         while let Some(vol) = rx.recv().await {
-            b.set_label(&vol);
+            label.set_label(&vol);
         }
     });
 
@@ -122,7 +128,7 @@ pub fn init(container: &gtk4::Box) {
                                 let vol = sink_info.volume.avg().0;
                                 let perc = (vol as f64 / 65536.0 * 100.0).round() as i32;
                                 let muted = sink_info.mute;
-                                let icon = if muted { "" } else { "" };
+                                let icon = if muted { "" } else { "" };
                                 let _ = tx_innermost.send(format!("{}  {}%", icon, perc));
                             }
                         });

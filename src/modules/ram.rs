@@ -4,7 +4,6 @@ use std::time::Duration;
 use sysinfo::System;
 
 pub fn init(container: &gtk4::Box) {
-    let _label = Button::builder().label("  ...%").build();
     let btn = Button::new();
     btn.add_css_class("btn");
     container.append(&btn);

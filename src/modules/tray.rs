@@ -1,7 +1,9 @@
 use crate::modules::xembed::{XEmbedBackend, XEmbedEvent};
 use gtk4::prelude::*;
 use gtk4::{Box, Button, GestureClick, Image, Orientation, Popover};
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use system_tray::client::{ActivateRequest, Client, UpdateEvent};
 use system_tray::menu::TrayMenu;
@@ -225,7 +227,8 @@ pub fn init(container: &gtk4::Box, backend: Arc<TrayBackend>) {
     });
     tray_box.add_controller(gesture_dismiss);
 
-    let gui_items: Arc<Mutex<HashMap<String, gtk4::Widget>>> = Arc::new(Mutex::new(HashMap::new()));
+    let gui_items: Rc<RefCell<HashMap<String, gtk4::Widget>>> =
+        Rc::new(RefCell::new(HashMap::new()));
 
     let tbox = tray_box.clone();
     let tgui_items = gui_items.clone();
@@ -236,7 +239,7 @@ pub fn init(container: &gtk4::Box, backend: Arc<TrayBackend>) {
         // Initial Sync Logic
         {
             let items = backend_ui.titems.lock().unwrap();
-            let mut map = tgui_items.lock().unwrap();
+            let mut map = tgui_items.borrow_mut();
             for (id, info) in items.iter() {
                 let btn = Button::builder()
                     .css_classes(vec!["btn".to_string()])
@@ -256,7 +259,7 @@ pub fn init(container: &gtk4::Box, backend: Arc<TrayBackend>) {
         loop {
             match rx_ui_global.recv().await {
                 Ok((id, info_opt)) => {
-                    let mut map = tgui_items.lock().unwrap();
+                    let mut map = tgui_items.borrow_mut();
                     if let Some(info) = info_opt {
                         let is_visible = matches!(
                             info.status,
@@ -279,16 +282,14 @@ pub fn init(container: &gtk4::Box, backend: Arc<TrayBackend>) {
                             tbox.append(&btn);
                             map.insert(id, btn.upcast());
                         }
-                    } else {
-                        if let Some(widget) = map.remove(&id) {
-                            tbox.remove(&widget);
-                        }
+                    } else if let Some(widget) = map.remove(&id) {
+                        tbox.remove(&widget);
                     }
                 }
                 Err(broadcast::error::RecvError::Lagged(_)) => {
                     // Full reconciliation on lag
                     let items = backend_ui.titems.lock().unwrap();
-                    let mut map = tgui_items.lock().unwrap();
+                    let mut map = tgui_items.borrow_mut();
 
                     map.retain(|id, widget| {
                         if !items.contains_key(id) {
@@ -331,12 +332,12 @@ pub fn init(container: &gtk4::Box, backend: Arc<TrayBackend>) {
         let mut rx_xembed = xbackend.subscribe();
         let tbox_x = tray_box.clone();
         let xbackend_cl = xbackend.clone();
-        let xgui_items: Arc<Mutex<HashMap<u32, gtk4::Widget>>> =
-            Arc::new(Mutex::new(HashMap::new()));
+        let xgui_items: Rc<RefCell<HashMap<u32, gtk4::Widget>>> =
+            Rc::new(RefCell::new(HashMap::new()));
 
         gtk4::glib::MainContext::default().spawn_local(async move {
             while let Ok(event) = rx_xembed.recv().await {
-                let mut map = xgui_items.lock().unwrap();
+                let mut map = xgui_items.borrow_mut();
                 match event {
                     XEmbedEvent::Add(win) => {
                         let btn = Button::builder()
@@ -352,10 +353,10 @@ pub fn init(container: &gtk4::Box, backend: Arc<TrayBackend>) {
                         }
                     }
                     XEmbedEvent::Update(win, pixels) => {
-                        if let Some(widget) = map.get(&win) {
-                            if let Some(btn) = widget.downcast_ref::<Button>() {
-                                update_xembed_icon(btn, &pixels);
-                            }
+                        if let Some(widget) = map.get(&win)
+                            && let Some(btn) = widget.downcast_ref::<Button>()
+                        {
+                            update_xembed_icon(btn, &pixels);
                         }
                     }
                 }
@@ -507,10 +508,10 @@ fn setup_button_signals(btn: &Button, id: &str, backend: &Arc<TrayBackend>) {
 
 fn update_icon(btn: &Button, info: &TrayItemInfo) {
     let theme = gtk4::IconTheme::for_display(&gtk4::gdk::Display::default().unwrap());
-    if let Some(path) = &info.icon_theme_path {
-        if !theme.search_path().iter().any(|p| p.to_str() == Some(path)) {
-            theme.add_search_path(path);
-        }
+    if let Some(path) = &info.icon_theme_path
+        && !theme.search_path().iter().any(|p| p.to_str() == Some(path))
+    {
+        theme.add_search_path(path);
     }
 
     if let Some(name) = &info.icon_name {
