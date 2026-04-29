@@ -366,22 +366,41 @@ pub fn init(container: &gtk4::Box, backend: Arc<TrayBackend>) {
 
 fn setup_xembed_signals(btn: &Button, win: u32, backend: &Arc<XEmbedBackend>) {
     let backend_cl = backend.clone();
+    let btn_left = btn.clone();
     let gesture_left = GestureClick::new();
     gesture_left.set_button(1);
     gesture_left.connect_pressed(move |_, _, x, y| {
         backend_cl.dismiss_menus();
-        backend_cl.send_click(win, x as i32, y as i32, 1);
+        let (root_x, root_y) = xembed_root_coords(&btn_left, x, y)
+            .map(|(root_x, root_y)| (Some(root_x), Some(root_y)))
+            .unwrap_or((None, None));
+        backend_cl.send_click(win, x as i32, y as i32, root_x, root_y, 1);
     });
     btn.add_controller(gesture_left);
 
     let gesture_right = GestureClick::new();
     gesture_right.set_button(3);
     let backend_right = backend.clone();
+    let btn_right = btn.clone();
     gesture_right.connect_pressed(move |_, _, x, y| {
         backend_right.dismiss_menus();
-        backend_right.send_click(win, x as i32, y as i32, 3);
+        let (root_x, root_y) = xembed_root_coords(&btn_right, x, y)
+            .map(|(root_x, root_y)| (Some(root_x), Some(root_y)))
+            .unwrap_or((None, None));
+        backend_right.send_click(win, x as i32, y as i32, root_x, root_y, 3);
     });
     btn.add_controller(gesture_right);
+}
+
+fn xembed_root_coords(btn: &Button, click_x: f64, click_y: f64) -> Option<(i32, i32)> {
+    let window = btn.root()?.downcast::<gtk4::Window>().ok()?;
+    let (widget_x, widget_y) = btn.translate_coordinates(&window, click_x, click_y)?;
+    let surface = window.surface()?;
+    let monitor = gtk4::prelude::WidgetExt::display(&window).monitor_at_surface(&surface)?;
+    let geom = monitor.geometry();
+    let window_x = geom.x();
+    let window_y = geom.y() + geom.height() - window.allocated_height();
+    Some((window_x + widget_x as i32, window_y + widget_y as i32))
 }
 
 fn update_xembed_icon(btn: &Button, pixels: &[u8]) {
