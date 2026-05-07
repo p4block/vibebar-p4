@@ -1,3 +1,4 @@
+use gtk4::gio::ApplicationFlags;
 use gtk4::prelude::*;
 use gtk4::{Application, ApplicationWindow, Box, Orientation};
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
@@ -105,6 +106,7 @@ fn create_window(
 fn main() {
     let app = Application::builder()
         .application_id("com.github.hal.vibebar-p4")
+        .flags(ApplicationFlags::ALLOW_REPLACEMENT | ApplicationFlags::REPLACE)
         .build();
 
     app.connect_activate(|app| {
