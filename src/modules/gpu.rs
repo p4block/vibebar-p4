@@ -18,6 +18,8 @@ pub fn init(container: &gtk4::Box) {
             .and_then(|s| s.trim().parse::<u32>().ok())
             .unwrap_or(0);
 
+        let vram_usage = read_vram_usage_percent().unwrap_or(0);
+
         let freq = std::fs::read_to_string("/sys/class/drm/card1/device/hwmon/hwmon7/freq1_input")
             .ok()
             .and_then(|s| s.trim().parse::<u32>().ok())
@@ -34,7 +36,10 @@ pub fn init(container: &gtk4::Box) {
         ui::set_button_label(
             &btn,
             &mut last_label,
-            format!("󰢮  {}% {:.1}GHz {:.1}W", gpu_usage, freq, power_watts),
+            format!(
+                "󰢮  {}% VRAM {}% {:.1}GHz {:.1}W",
+                gpu_usage, vram_usage, freq, power_watts
+            ),
         );
     };
 
@@ -44,4 +49,20 @@ pub fn init(container: &gtk4::Box) {
         update();
         glib::ControlFlow::Continue
     });
+}
+
+fn read_vram_usage_percent() -> Option<u32> {
+    let used = read_sysfs_u64("/sys/class/drm/card1/device/mem_info_vram_used")?;
+    let total = read_sysfs_u64("/sys/class/drm/card1/device/mem_info_vram_total")?;
+    if total == 0 {
+        return None;
+    }
+
+    Some(((used as f64 / total as f64) * 100.0).round() as u32)
+}
+
+fn read_sysfs_u64(path: &str) -> Option<u64> {
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|s| s.trim().parse::<u64>().ok())
 }

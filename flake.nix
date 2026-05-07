@@ -32,6 +32,11 @@
           dbus
           libpulseaudio
         ];
+
+        runtimeInputs = with pkgs; [
+          brightnessctl
+          power-profiles-daemon
+        ];
       in
       {
         packages.default = pkgs.rustPlatform.buildRustPackage {
@@ -47,13 +52,59 @@
 
           postInstall = ''
             wrapProgram $out/bin/vibebar-p4 \
-              --prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath buildInputs}
+              --prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath buildInputs} \
+              --prefix PATH : ${pkgs.lib.makeBinPath runtimeInputs}
           '';
         };
 
         devShells.default = pkgs.mkShell {
           inherit nativeBuildInputs buildInputs;
+          packages = runtimeInputs;
         };
       }
-    );
+    ) // {
+      nixosModules.default = { config, lib, pkgs, ... }:
+        let
+          cfg = config.programs.vibebar-p4;
+        in
+        {
+          options.programs.vibebar-p4 = {
+            enable = lib.mkEnableOption "vibebar-p4";
+
+            package = lib.mkOption {
+              type = lib.types.package;
+              default = self.packages.${pkgs.system}.default;
+              defaultText = lib.literalExpression "vibebar-p4.packages.\${pkgs.system}.default";
+              description = "vibebar-p4 package to run.";
+            };
+
+            enablePowerProfilesDaemon = lib.mkOption {
+              type = lib.types.bool;
+              default = true;
+              description = "Enable power-profiles-daemon for the power profile module.";
+            };
+          };
+
+          config = lib.mkIf cfg.enable {
+            environment.systemPackages = [ cfg.package ];
+            services.udev.packages = [ pkgs.brightnessctl ];
+            services.power-profiles-daemon.enable = lib.mkIf cfg.enablePowerProfilesDaemon true;
+
+            systemd.user.services.vibebar-p4 = {
+              Unit = {
+                Description = "vibebar-p4 status bar";
+                After = [ "graphical-session.target" ];
+                PartOf = [ "graphical-session.target" ];
+              };
+
+              Service = {
+                ExecStart = "${cfg.package}/bin/vibebar-p4";
+                Restart = "on-failure";
+              };
+
+              Install.WantedBy = [ "graphical-session.target" ];
+            };
+          };
+        };
+    };
 }

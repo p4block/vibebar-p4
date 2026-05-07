@@ -15,6 +15,7 @@
     - **Workspaces**: Roman numeral (I, II, III...) workspace buttons via Sway IPC or Niri IPC.
     - **Media**: MPRIS integration for music control and status.
     - **Volume**: Direct PulseAudio/Pipewire integration.
+    - **Laptop Power**: Battery, brightness control, and `powerprofilesctl` profile switching.
     - **System Tray**: StatusNotifierItem (SNI) host implementation for background application icons.
 
 ## Design Aesthetic
@@ -51,6 +52,28 @@ environment.systemPackages = [
   vibebar-p4.packages.${pkgs.system}.default
 ];
 ```
+
+Or enable the provided NixOS module:
+
+```nix
+{
+  inputs.vibebar-p4.url = "github:p4block/vibebar-p4";
+
+  outputs = { nixpkgs, vibebar-p4, ... }: {
+    nixosConfigurations.your-laptop = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        vibebar-p4.nixosModules.default
+        {
+          programs.vibebar-p4.enable = true;
+        }
+      ];
+    };
+  };
+}
+```
+
+The package wrapper includes `brightnessctl` and `powerprofilesctl` in `PATH`. The NixOS module also installs the `brightnessctl` udev rules and enables `services.power-profiles-daemon` by default.
 
 ### In your Sway config:
 Replace `waybar` with `vibebar-p4`:

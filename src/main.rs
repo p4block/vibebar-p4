@@ -86,6 +86,9 @@ fn create_window(
 
     modules::network::init(&right);
     modules::aqi::init(&right);
+    modules::battery::init(&right);
+    modules::brightness::init(&right);
+    modules::power_profile::init(&right);
 
     modules::mic::init(&right);
     modules::volume::init(&right);

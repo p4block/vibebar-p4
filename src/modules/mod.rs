@@ -1,4 +1,6 @@
 pub mod aqi;
+pub mod battery;
+pub mod brightness;
 pub mod clock;
 pub mod cpu;
 pub mod disk;
@@ -6,6 +8,7 @@ pub mod gpu;
 pub mod mic;
 pub mod mpris;
 pub mod network;
+pub mod power_profile;
 pub mod ram;
 pub mod scripts;
 pub mod tray;
