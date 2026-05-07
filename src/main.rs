@@ -5,6 +5,9 @@ use std::sync::Arc;
 
 mod modules;
 
+const BAR_HEIGHT: i32 = 24;
+const INPUT_REGION_WIDTH: i32 = 10_000;
+
 fn create_window(
     app: &Application,
     monitor: &gdk4::Monitor,
@@ -26,16 +29,13 @@ fn create_window(
     window.set_anchor(Edge::Left, true);
     window.set_anchor(Edge::Right, true);
 
-    // Window is 800px tall to allow popovers to grow upwards
-    window.set_default_size(-1, 800);
+    window.set_default_size(-1, BAR_HEIGHT);
 
-    // Reserve 24px of space for the bar (User preference: "keep my css/ultrawide support")
-    window.set_exclusive_zone(24);
+    window.set_exclusive_zone(BAR_HEIGHT);
 
     let content = gtk4::CenterBox::new();
     content.set_widget_name("main-container");
-    content.set_valign(gtk4::Align::End); // Place bar at the bottom
-    content.set_height_request(24); // Match exclusive zone height
+    content.set_height_request(BAR_HEIGHT);
 
     let left = Box::new(Orientation::Horizontal, 0);
     let center = Box::new(Orientation::Horizontal, 0);
@@ -61,10 +61,11 @@ fn create_window(
 
     window.set_child(Some(&content));
 
-    // Set input region to only the bottom 24px to allow clicks to pass through above the bar
+    // Limit input to the bar itself, even if the compositor allocates extra surface height.
     window.connect_realize(|w| {
         if let Some(surface) = w.surface() {
-            let rect = cairo::RectangleInt::new(0, 800 - 24, 10000, 24);
+            let input_y = (w.allocated_height() - BAR_HEIGHT).max(0);
+            let rect = cairo::RectangleInt::new(0, input_y, INPUT_REGION_WIDTH, BAR_HEIGHT);
             let region = cairo::Region::create_rectangle(&rect);
             surface.set_input_region(&region);
         }
@@ -109,14 +110,18 @@ fn main() {
         // Load the user's restored style.css
         provider.load_from_data(include_str!("style.css"));
 
-        let tray_backend = if let Ok(rt) = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-        {
-            rt.block_on(async { modules::tray::TrayBackend::new().await })
-        } else {
-            None
-        };
+        static TRAY_RUNTIME: std::sync::OnceLock<Option<tokio::runtime::Runtime>> =
+            std::sync::OnceLock::new();
+        let tray_backend = TRAY_RUNTIME
+            .get_or_init(|| {
+                tokio::runtime::Builder::new_multi_thread()
+                    .enable_all()
+                    .thread_name("vibebar-tray")
+                    .build()
+                    .ok()
+            })
+            .as_ref()
+            .and_then(|rt| rt.block_on(async { modules::tray::TrayBackend::new().await }));
 
         if let Some(display) = gdk4::Display::default() {
             gtk4::style_context_add_provider_for_display(
