@@ -47,6 +47,12 @@ fn find_batteries() -> Vec<PathBuf> {
         .filter_map(Result::ok)
         .map(|entry| entry.path())
         .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .map(|name| matches!(name, "BAT0" | "BAT1"))
+                .unwrap_or(false)
+        })
+        .filter(|path| {
             std::fs::read_to_string(path.join("type"))
                 .map(|s| s.trim() == "Battery")
                 .unwrap_or(false)

@@ -1,3 +1,4 @@
+mod hyprland;
 mod niri;
 mod sway;
 
@@ -6,6 +7,7 @@ use gtk4::{Box, Button, Orientation};
 
 #[derive(Clone)]
 enum WorkspaceTarget {
+    HyprlandId(i64),
     NiriId(u64),
     SwayName(String),
 }
@@ -35,6 +37,7 @@ pub fn init(container: &gtk4::Box) {
 
     std::thread::spawn(move || match niri::connect_socket() {
         Ok(socket) => niri::run(socket, rx_ws, tx),
+        Err(_) if hyprland::is_available() => hyprland::run(rx_ws, tx),
         Err(_) => sway::run(rx_ws, tx),
     });
 }

@@ -57,7 +57,7 @@ pub fn init(container: &gtk4::Box) {
 }
 
 fn brightness_available() -> bool {
-    command_exists("brightnessctl") || find_backlight_device().is_some()
+    find_backlight_device().is_some()
 }
 
 fn adjust_brightness(value: &str) {
@@ -111,13 +111,4 @@ fn read_u64(path: PathBuf) -> Option<u64> {
     std::fs::read_to_string(path)
         .ok()
         .and_then(|s| s.trim().parse::<u64>().ok())
-}
-
-fn command_exists(command: &str) -> bool {
-    std::process::Command::new(command)
-        .arg("--help")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .is_ok()
 }

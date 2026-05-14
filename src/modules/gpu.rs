@@ -27,16 +27,16 @@ pub fn init(container: &gtk4::Box) {
         let mut power_watts = 0.0;
 
         if let Some(hwmon_path) = find_hwmon_path(DEVICE_BASE) {
-            if let Ok(s) = std::fs::read_to_string(hwmon_path.join("freq1_input")) {
-                if let Ok(f) = s.trim().parse::<u32>() {
-                    freq = f as f64 / 1_000_000_000.0;
-                }
+            if let Ok(s) = std::fs::read_to_string(hwmon_path.join("freq1_input"))
+                && let Ok(f) = s.trim().parse::<u32>()
+            {
+                freq = f as f64 / 1_000_000_000.0;
             }
 
-            if let Ok(s) = std::fs::read_to_string(hwmon_path.join("power1_average")) {
-                if let Ok(p) = s.trim().parse::<u32>() {
-                    power_watts = p as f64 / 1_000_000.0;
-                }
+            if let Ok(s) = std::fs::read_to_string(hwmon_path.join("power1_average"))
+                && let Ok(p) = s.trim().parse::<u32>()
+            {
+                power_watts = p as f64 / 1_000_000.0;
             }
         }
 
