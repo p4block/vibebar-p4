@@ -148,8 +148,7 @@ fn main() {
         }
 
         // Handle SIGUSR2 for restart
-        // 12 is SIGUSR2 on Linux
-        glib::unix_signal_add_local(12, move || {
+        glib::unix_signal_add_local(nix::libc::SIGUSR2, move || {
             let exe = std::env::current_exe().unwrap();
             let args: Vec<_> = std::env::args_os().collect();
 

@@ -15,4 +15,4 @@ pub mod tray;
 pub mod ui;
 pub mod volume;
 pub mod workspaces;
-pub mod xembed;
+pub(crate) mod xembed;

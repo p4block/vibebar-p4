@@ -4,7 +4,22 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
 
-const DEVICE_BASE: &str = "/sys/class/drm/card1/device";
+fn find_gpu_device_base() -> Option<PathBuf> {
+    let drm_dir = PathBuf::from("/sys/class/drm");
+    let entries = std::fs::read_dir(drm_dir).ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = path.file_name()?.to_str()?;
+        if !name.starts_with("card") || name.contains('-') {
+            continue;
+        }
+        let device = path.join("device");
+        if device.exists() && device.join("gpu_busy_percent").exists() {
+            return Some(device);
+        }
+    }
+    None
+}
 
 pub fn init(container: &gtk4::Box) {
     let btn = ui::button("󰢮  ...");
@@ -14,19 +29,25 @@ pub fn init(container: &gtk4::Box) {
         let _ = Command::new("lact").spawn();
     });
 
+    let device_base = find_gpu_device_base();
+
     let mut last_label = String::new();
     let mut update = move || {
-        let gpu_usage = std::fs::read_to_string(format!("{}/gpu_busy_percent", DEVICE_BASE))
+        let Some(ref base) = device_base else {
+            return;
+        };
+
+        let gpu_usage = std::fs::read_to_string(base.join("gpu_busy_percent"))
             .ok()
             .and_then(|s| s.trim().parse::<u32>().ok())
             .unwrap_or(0);
 
-        let vram_usage = read_vram_usage_percent(DEVICE_BASE).unwrap_or(0);
+        let vram_usage = read_vram_usage_percent(base).unwrap_or(0);
 
         let mut freq = 0.0;
         let mut power_watts = 0.0;
 
-        if let Some(hwmon_path) = find_hwmon_path(DEVICE_BASE) {
+        if let Some(hwmon_path) = find_hwmon_path(base) {
             if let Ok(s) = std::fs::read_to_string(hwmon_path.join("freq1_input"))
                 && let Ok(f) = s.trim().parse::<u32>()
             {
@@ -58,8 +79,8 @@ pub fn init(container: &gtk4::Box) {
     });
 }
 
-fn find_hwmon_path(device_base: &str) -> Option<PathBuf> {
-    let hwmon_dir = format!("{}/hwmon", device_base);
+fn find_hwmon_path(device_base: &PathBuf) -> Option<PathBuf> {
+    let hwmon_dir = device_base.join("hwmon");
     let entries = std::fs::read_dir(hwmon_dir).ok()?;
 
     for entry in entries.flatten() {
@@ -71,9 +92,9 @@ fn find_hwmon_path(device_base: &str) -> Option<PathBuf> {
     None
 }
 
-fn read_vram_usage_percent(device_base: &str) -> Option<u32> {
-    let used = read_sysfs_u64(&format!("{}/mem_info_vram_used", device_base))?;
-    let total = read_sysfs_u64(&format!("{}/mem_info_vram_total", device_base))?;
+fn read_vram_usage_percent(device_base: &PathBuf) -> Option<u32> {
+    let used = read_sysfs_u64(&device_base.join("mem_info_vram_used"))?;
+    let total = read_sysfs_u64(&device_base.join("mem_info_vram_total"))?;
     if total == 0 {
         return None;
     }
@@ -81,7 +102,7 @@ fn read_vram_usage_percent(device_base: &str) -> Option<u32> {
     Some(((used as f64 / total as f64) * 100.0).round() as u32)
 }
 
-fn read_sysfs_u64(path: &str) -> Option<u64> {
+fn read_sysfs_u64(path: &PathBuf) -> Option<u64> {
     std::fs::read_to_string(path)
         .ok()
         .and_then(|s| s.trim().parse::<u64>().ok())

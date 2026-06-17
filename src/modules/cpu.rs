@@ -1,8 +1,28 @@
 use crate::modules::ui;
 use gtk4::prelude::*;
+use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
 use sysinfo::System;
+
+fn find_cpu_hwmon() -> Option<PathBuf> {
+    let hwmon_dir = PathBuf::from("/sys/class/hwmon");
+    let entries = std::fs::read_dir(hwmon_dir).ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = std::fs::read_to_string(path.join("name")).ok()?;
+        let cpu_sensors = [
+            "k10temp", "coretemp", "zenpower", "k8temp", "fam15h_power",
+        ];
+        if cpu_sensors.contains(&name.trim()) && path.join("temp1_input").exists() {
+            return Some(path);
+        }
+    }
+    None
+}
 
 pub fn init(container: &gtk4::Box) {
     let btn = ui::empty_button();
@@ -15,6 +35,8 @@ pub fn init(container: &gtk4::Box) {
     let mut sys = System::new();
     let mut last_label = String::new();
 
+    let cpu_hwmon = find_cpu_hwmon();
+
     let mut update = move || {
         sys.refresh_cpu_usage();
         sys.refresh_cpu_specifics(sysinfo::CpuRefreshKind::nothing().with_frequency());
@@ -23,9 +45,10 @@ pub fn init(container: &gtk4::Box) {
         let max_freq = sys.cpus().iter().map(|c| c.frequency()).max().unwrap_or(0);
         let ghz = max_freq as f64 / 1000.0;
 
-        // Temperature (Direct sysfs read)
-        let temp = std::fs::read_to_string("/sys/class/hwmon/hwmon2/temp1_input")
-            .ok()
+        // Temperature (Direct sysfs read via auto-detected hwmon)
+        let temp = cpu_hwmon
+            .as_ref()
+            .and_then(|p| std::fs::read_to_string(p.join("temp1_input")).ok())
             .and_then(|s| s.trim().parse::<f64>().ok())
             .map(|t| t / 1000.0)
             .unwrap_or(0.0);

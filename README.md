@@ -6,17 +6,25 @@
 
 ## Implementation Details
 
-- **Core**: Built with Rust using `gtk4` and `gtk4-layer-shell`.
-- **Async Execution**: Uses `tokio` for background data fetching (network, stats, etc.) and `gtk4::glib::MainContext` for UI updates.
+- **Core**: Built with Rust using `gtk4` + `gtk4-layer-shell` (Wayland layer-shell protocol).
+- **Async Execution**: `tokio` for background data fetching; `gtk4::glib::MainContext` for UI updates.
+- **Dependencies**: See [`Cargo.toml`](Cargo.toml) for the full crate list. Key highlights:
+  - **IPC**: `swayipc-async` (Sway), `niri-ipc` (Niri), raw Unix sockets (Hyprland)
+  - **Audio**: `libpulse-binding` (PulseAudio sink/source volume & mute)
+  - **Media**: `mpris` (MPRIS D-Bus media player integration)
+  - **System Tray**: `system-tray` (SNI host) + `x11rb` (XEmbed fallback for legacy icons)
+  - **System Info**: `sysinfo` (CPU load/freq, memory), `nix` (statvfs for disk)
+  - **HTTP**: `reqwest` (AQI API fetching)
+  - **D-Bus**: `zbus` (transitive via system-tray and mpris)
 - **Modules**:
     - **CPU**: Internal implementation using unicode blocks (▂▃▄▅▆▇█) for real-time load visualization.
-    - **Memory/Disk**: Efficient system monitoring using `sysinfo` and `/proc` filesystems.
-    - **Network**: Mbps/Gbps bandwidth monitoring with automatic unit scaling.
-    - **Workspaces**: Roman numeral (I, II, III...) workspace buttons via Sway IPC or Niri IPC.
+    - **Memory/Disk**: System monitoring using `sysinfo` and `nix::sys::statvfs`.
+    - **Network**: `/proc/net` bandwidth monitoring with automatic unit scaling; popover with IP/SSID/signal details.
+    - **Workspaces**: Auto-detects Niri → Hyprland → Sway; clickable workspace buttons.
     - **Media**: MPRIS integration for music control and status.
-    - **Volume**: Direct PulseAudio/Pipewire integration.
-    - **Laptop Power**: Battery, brightness control, and `powerprofilesctl` profile switching.
-    - **System Tray**: StatusNotifierItem (SNI) host implementation for background application icons.
+    - **Volume**: PulseAudio integration with scroll-to-adjust and click-to-mute.
+    - **Laptop Power**: Battery, brightness control (`brightnessctl`), and `powerprofilesctl` profile switching.
+    - **System Tray**: StatusNotifierItem (SNI) host + XEmbed backend for legacy icons.
 
 ## Design Aesthetic
 The bar follows a minimal custom aesthetic with specific horizontal margins and a solid background to match my previous `waybar` configuration.
