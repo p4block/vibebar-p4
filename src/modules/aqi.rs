@@ -1,4 +1,5 @@
 use crate::modules::ui;
+use crate::runtime;
 use gtk4::glib;
 use gtk4::prelude::*;
 use serde::Deserialize;
@@ -40,9 +41,7 @@ fn get_icon(aqi: i32) -> &'static str {
     }
 }
 
-async fn fetch_aqi() -> String {
-    let client = reqwest::Client::new();
-
+async fn fetch_aqi(client: &reqwest::Client) -> String {
     // 1. Determine URL (City vs Geolocation)
     let url = if !CITY.is_empty() {
         format!("https://api.waqi.info/feed/{}/?token={}", CITY, TOKEN)
@@ -93,17 +92,16 @@ pub fn init(container: &gtk4::Box) {
         }
     });
 
-    // Background Worker: Handles networking and timing
-    std::thread::spawn(move || {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(async move {
-            loop {
-                let display_text = fetch_aqi().await;
-                let _ = tx.send(display_text);
+    // Background Worker: Handles networking and timing on the shared runtime.
+    // A single reqwest::Client is reused across fetches for connection pooling.
+    let client = reqwest::Client::new();
+    runtime::handle().spawn(async move {
+        loop {
+            let display_text = fetch_aqi(&client).await;
+            let _ = tx.send(display_text);
 
-                // Sleep for the interval
-                tokio::time::sleep(Duration::from_secs(UPDATE_INTERVAL_MINS * 60)).await;
-            }
-        });
+            // Sleep for the interval
+            tokio::time::sleep(Duration::from_secs(UPDATE_INTERVAL_MINS * 60)).await;
+        }
     });
 }

@@ -27,20 +27,20 @@ pub fn init(container: &gtk4::Box) {
         // Threshold of 1.0 corresponds to a standard "click" or "notch"
         // Handle Volume UP (dy < 0)
         while *acc <= -1.0 {
-            let _ = std::process::Command::new("pactl")
-                .arg("set-sink-volume")
-                .arg("@DEFAULT_SINK@")
-                .arg("+5%")
+            let _ = std::process::Command::new("wpctl")
+                .arg("set-volume")
+                .arg("@DEFAULT_AUDIO_SINK@")
+                .arg("5%+")
                 .spawn();
             *acc += 1.0;
         }
 
         // Handle Volume DOWN (dy > 0)
         while *acc >= 1.0 {
-            let _ = std::process::Command::new("pactl")
-                .arg("set-sink-volume")
-                .arg("@DEFAULT_SINK@")
-                .arg("-5%")
+            let _ = std::process::Command::new("wpctl")
+                .arg("set-volume")
+                .arg("@DEFAULT_AUDIO_SINK@")
+                .arg("5%-")
                 .spawn();
             *acc -= 1.0;
         }
@@ -49,9 +49,9 @@ pub fn init(container: &gtk4::Box) {
     });
 
     btn.connect_clicked(|_| {
-        let _ = std::process::Command::new("pactl")
-            .arg("set-sink-mute")
-            .arg("@DEFAULT_SINK@")
+        let _ = std::process::Command::new("wpctl")
+            .arg("set-mute")
+            .arg("@DEFAULT_AUDIO_SINK@")
             .arg("toggle")
             .spawn();
     });

@@ -1,8 +1,9 @@
 use crate::modules::ui;
 use gtk4::prelude::*;
 use gtk4::{EventControllerScroll, EventControllerScrollFlags};
+use nix::sys::inotify::{AddWatchFlags, InitFlags, Inotify};
 use std::cell::RefCell;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -11,9 +12,9 @@ pub fn init(container: &gtk4::Box) {
     btn.set_visible(false);
     container.append(&btn);
 
-    if !brightness_available() {
+    let Some(device) = find_backlight_device() else {
         return;
-    }
+    };
 
     let scroll = EventControllerScroll::new(EventControllerScrollFlags::VERTICAL);
     let scroll_accum = Rc::new(RefCell::new(0.0));
@@ -37,27 +38,61 @@ pub fn init(container: &gtk4::Box) {
     });
     btn.add_controller(scroll);
 
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<u32>();
+
     let mut last_label = String::new();
-    let mut update = move || {
-        let Some(percent) = read_brightness_percent() else {
-            btn.set_visible(false);
-            return;
-        };
-
-        btn.set_visible(true);
-        ui::set_label(&label, &mut last_label, format!("󰃠  {}%", percent));
-    };
-
-    update();
-
-    glib::timeout_add_local(Duration::from_secs(2), move || {
-        update();
-        glib::ControlFlow::Continue
+    let b = btn.clone();
+    let label_clone = label.clone();
+    gtk4::glib::MainContext::default().spawn_local(async move {
+        while let Some(percent) = rx.recv().await {
+            b.set_visible(true);
+            ui::set_label(&label_clone, &mut last_label, format!("󰃠  {}%", percent));
+        }
     });
+
+    // Initial read so the bar shows a value before the first inotify event.
+    if let Some(percent) = read_brightness_percent(&device) {
+        btn.set_visible(true);
+        let _ = tx.send(percent);
+    }
+
+    // Reactive updates: watch the sysfs brightness file with inotify and
+    // refresh the label only when it changes. Falls back to polling if the
+    // kernel/driver does not support inotify on this attribute.
+    let device_watcher = device.clone();
+    let tx_watcher = tx.clone();
+    std::thread::spawn(move || watch_brightness(&device_watcher, tx_watcher));
 }
 
-fn brightness_available() -> bool {
-    find_backlight_device().is_some()
+fn watch_brightness(device: &Path, tx: tokio::sync::mpsc::UnboundedSender<u32>) {
+    let brightness_path = device.join("brightness");
+
+    // Reactive path: watch the sysfs brightness attribute for changes.
+    // Drivers call sysfs_notify() on writes, so this fires for hardware-key,
+    // brightnessctl, and direct-sysfs changes alike.
+    let inotify = Inotify::init(InitFlags::empty()).and_then(|inotify| {
+        inotify
+            .add_watch(&brightness_path, AddWatchFlags::IN_MODIFY)
+            .map(|_| inotify)
+    });
+
+    match inotify {
+        Ok(inotify) => loop {
+            // Blocks until the brightness attribute is modified.
+            if inotify.read_events().is_err() {
+                break;
+            }
+            if let Some(percent) = read_brightness_percent(device) {
+                let _ = tx.send(percent);
+            }
+        },
+        Err(_) => loop {
+            std::thread::sleep(Duration::from_secs(5));
+            if let Some(percent) = read_brightness_percent(device) {
+                let _ = tx.send(percent);
+            }
+        },
+    }
 }
 
 fn adjust_brightness(value: &str) {
@@ -67,12 +102,7 @@ fn adjust_brightness(value: &str) {
         .spawn();
 }
 
-fn read_brightness_percent() -> Option<u32> {
-    if let Some(percent) = read_brightnessctl_percent() {
-        return Some(percent);
-    }
-
-    let device = find_backlight_device()?;
+fn read_brightness_percent(device: &Path) -> Option<u32> {
     let current = read_u64(device.join("brightness"))?;
     let max = read_u64(device.join("max_brightness"))?;
     if max == 0 {
@@ -80,23 +110,6 @@ fn read_brightness_percent() -> Option<u32> {
     }
 
     Some(((current as f64 / max as f64) * 100.0).round() as u32)
-}
-
-fn read_brightnessctl_percent() -> Option<u32> {
-    let output = std::process::Command::new("brightnessctl")
-        .arg("-m")
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    stdout
-        .trim()
-        .split(',')
-        .find_map(|part| part.strip_suffix('%'))
-        .and_then(|part| part.parse::<u32>().ok())
 }
 
 fn find_backlight_device() -> Option<PathBuf> {

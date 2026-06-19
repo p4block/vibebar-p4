@@ -13,9 +13,9 @@ pub fn init(container: &gtk4::Box) {
     container.append(&btn);
 
     btn.connect_clicked(|_| {
-        let _ = std::process::Command::new("pactl")
-            .arg("set-source-mute")
-            .arg("@DEFAULT_SOURCE@")
+        let _ = std::process::Command::new("wpctl")
+            .arg("set-mute")
+            .arg("@DEFAULT_AUDIO_SOURCE@")
             .arg("toggle")
             .spawn();
     });

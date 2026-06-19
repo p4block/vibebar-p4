@@ -1,6 +1,6 @@
 use crate::modules::ui;
 use gtk4::prelude::*;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
@@ -79,7 +79,7 @@ pub fn init(container: &gtk4::Box) {
     });
 }
 
-fn find_hwmon_path(device_base: &PathBuf) -> Option<PathBuf> {
+fn find_hwmon_path(device_base: &Path) -> Option<PathBuf> {
     let hwmon_dir = device_base.join("hwmon");
     let entries = std::fs::read_dir(hwmon_dir).ok()?;
 
@@ -92,7 +92,7 @@ fn find_hwmon_path(device_base: &PathBuf) -> Option<PathBuf> {
     None
 }
 
-fn read_vram_usage_percent(device_base: &PathBuf) -> Option<u32> {
+fn read_vram_usage_percent(device_base: &Path) -> Option<u32> {
     let used = read_sysfs_u64(&device_base.join("mem_info_vram_used"))?;
     let total = read_sysfs_u64(&device_base.join("mem_info_vram_total"))?;
     if total == 0 {

@@ -14,9 +14,7 @@ fn find_cpu_hwmon() -> Option<PathBuf> {
             continue;
         }
         let name = std::fs::read_to_string(path.join("name")).ok()?;
-        let cpu_sensors = [
-            "k10temp", "coretemp", "zenpower", "k8temp", "fam15h_power",
-        ];
+        let cpu_sensors = ["k10temp", "coretemp", "zenpower", "k8temp", "fam15h_power"];
         if cpu_sensors.contains(&name.trim()) && path.join("temp1_input").exists() {
             return Some(path);
         }

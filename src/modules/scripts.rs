@@ -1,4 +1,5 @@
 use crate::modules::ui;
+use crate::runtime;
 use gtk4::GestureClick;
 use gtk4::prelude::*;
 use std::process::Command as StdCommand;
@@ -42,21 +43,19 @@ pub fn init(
         }
     });
 
-    std::thread::spawn(move || {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(async move {
-            let mut last_label = String::new();
-            loop {
-                if let Some(display_text) = run_command(&cmd_own).await
-                    && display_text != last_label
-                {
-                    let _ = tx.send(display_text.clone());
-                    last_label = display_text;
-                }
-
-                tokio::time::sleep(Duration::from_secs(interval_secs)).await;
+    // Background Worker: runs commands on the shared runtime.
+    runtime::handle().spawn(async move {
+        let mut last_label = String::new();
+        loop {
+            if let Some(display_text) = run_command(&cmd_own).await
+                && display_text != last_label
+            {
+                let _ = tx.send(display_text.clone());
+                last_label = display_text;
             }
-        });
+
+            tokio::time::sleep(Duration::from_secs(interval_secs)).await;
+        }
     });
 }
 

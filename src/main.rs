@@ -5,6 +5,7 @@ use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use std::sync::Arc;
 
 mod modules;
+mod runtime;
 
 const BAR_HEIGHT: i32 = 24;
 const INPUT_REGION_WIDTH: i32 = 10_000;
@@ -115,18 +116,8 @@ fn main() {
         // Load the user's restored style.css
         provider.load_from_data(include_str!("style.css"));
 
-        static TRAY_RUNTIME: std::sync::OnceLock<Option<tokio::runtime::Runtime>> =
-            std::sync::OnceLock::new();
-        let tray_backend = TRAY_RUNTIME
-            .get_or_init(|| {
-                tokio::runtime::Builder::new_multi_thread()
-                    .enable_all()
-                    .thread_name("vibebar-tray")
-                    .build()
-                    .ok()
-            })
-            .as_ref()
-            .and_then(|rt| rt.block_on(async { modules::tray::TrayBackend::new().await }));
+        let tray_backend =
+            runtime::init().block_on(async { modules::tray::TrayBackend::new().await });
 
         if let Some(display) = gdk4::Display::default() {
             gtk4::style_context_add_provider_for_display(
