@@ -23,8 +23,8 @@ fn create_window(
     // Layer Shell configuration
     window.init_layer_shell();
     window.set_layer(Layer::Top);
-    window.set_namespace("vibebar-p4");
-    window.set_monitor(monitor);
+    window.set_namespace(Some("vibebar-p4"));
+    window.set_monitor(Some(monitor));
 
     // Anchor to bottom, left, and right
     window.set_anchor(Edge::Bottom, true);
@@ -69,7 +69,7 @@ fn create_window(
             let input_y = (w.allocated_height() - BAR_HEIGHT).max(0);
             let rect = cairo::RectangleInt::new(0, input_y, INPUT_REGION_WIDTH, BAR_HEIGHT);
             let region = cairo::Region::create_rectangle(&rect);
-            surface.set_input_region(&region);
+            surface.set_input_region(Some(&region));
         }
     });
 
