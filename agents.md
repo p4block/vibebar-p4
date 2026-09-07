@@ -8,6 +8,11 @@ Rust/GTK4 status bar for Wayland compositors (niri, Hyprland, sway). Personal-us
 cargo run --release
 ```
 
+After completing changes, run `cargo build --release` and relaunch
+`target/release/vibebar-p4` in the active desktop session. The GTK application's
+single-instance replacement handles the old process. The sway startup script
+uses this release binary on the next boot; keep it current.
+
 Useful checks:
 
 ```bash
@@ -26,7 +31,7 @@ cargo clippy --all-targets -- -D warnings
 - Modules are appended directly into left, center, and right GTK boxes.
 - Fast UI updates use `glib::timeout_add_local()`.
 - Blocking or async sources use a background `std::thread` plus `tokio::sync::mpsc::unbounded_channel` back to `glib::MainContext::default().spawn_local()`.
-- `SIGUSR2` (via `glib::unix_signal_add_local`) restarts the process in-place through `nix::unistd::execv`.
+- `SIGUSR2` is caught via `sigwait(2)` (blocking in a dedicated thread, inherited signal mask) and re-dispatches the restart to the GTK main-loop thread via `glib::idle_add_once()`. The signal is blocked before GTK or Tokio starts any threads; the idle callback runs the restart on the GTK main loop.
 
 ### Runtime
 
@@ -201,7 +206,7 @@ Each module is `pub fn init(container: &gtk4::Box, ...)` and registers widgets +
 - Optional click command follows the same direct-or-shell path.
 - Initial update on startup.
 - If stdout parses as JSON, `json["text"]` is used when present.
-- Current registration: `checkupdates | wc -l` every 3600 seconds.
+- Current registration: `checkupdates | wc -l` every 3600 seconds; click opens `footclient -e paru` and refreshes the count when the terminal exits.
 
 #### `aqi`
 
@@ -342,7 +347,7 @@ Note: `volume` and `mic` control commands go through `wpctl` (WirePlumber), whil
 ### Workspaces Missing
 
 - niri: confirm `NIRI_SOCKET` is set and points to a live niri IPC socket.
-- Hyprland: confirm `~/.config/hypr/.socket.sock` / `.socket2.sock` exist.
+- Hyprland: confirm `$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket.sock` and `.socket2.sock` exist.
 - sway: confirm `swaymsg -t get_workspaces` works in the same environment.
 - Backends are tried niri → Hyprland → sway; the first that connects wins.
 
@@ -360,7 +365,7 @@ Note: `volume` and `mic` control commands go through `wpctl` (WirePlumber), whil
 
 ### SIGUSR2 Restart Fails
 
-- The handler `unwrap()`s `current_exe()` and the `CString` conversions; a failure here will panic in the signal handler. Verify `current_exe()` points to a valid executable path.
+- Restart preparation and `execv` failures are logged with `[restart]`; the bar keeps running and can retry on the next signal. Verify `current_exe()` points to a valid executable path.
 
 ## Known Code Review Notes
 
