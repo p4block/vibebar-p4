@@ -105,6 +105,31 @@ fn create_window(
 }
 
 fn main() {
+    // Set the mask before GTK or Tokio can spawn threads: all threads must
+    // inherit it so SIGUSR2 is consumed by sigwait instead of terminating us.
+    let mut restart_signal = nix::sys::signal::SigSet::empty();
+    restart_signal.add(nix::sys::signal::Signal::SIGUSR2);
+    restart_signal
+        .thread_block()
+        .expect("failed to block SIGUSR2");
+    std::thread::spawn(move || {
+        loop {
+            match restart_signal.wait() {
+                Ok(_) => {
+                    glib::idle_add_once(|| {
+                        if let Err(error) = restart() {
+                            eprintln!("[restart] failed to restart: {error}");
+                        }
+                    });
+                }
+                Err(error) => {
+                    eprintln!("[restart] signal wait failed: {error}");
+                    break;
+                }
+            }
+        }
+    });
+
     let app = Application::builder()
         .application_id("com.github.hal.vibebar-p4")
         .flags(ApplicationFlags::ALLOW_REPLACEMENT | ApplicationFlags::REPLACE)
@@ -137,27 +162,20 @@ fn main() {
                 }
             }
         }
-
-        // Handle SIGUSR2 for restart
-        glib::unix_signal_add_local(nix::libc::SIGUSR2, move || {
-            let exe = std::env::current_exe().unwrap();
-            let args: Vec<_> = std::env::args_os().collect();
-
-            // Prepare CStrings for execv
-            use std::ffi::CString;
-            use std::os::unix::ffi::OsStrExt;
-
-            let path_c = CString::new(exe.as_os_str().as_bytes()).unwrap();
-            let args_c: Vec<CString> = args
-                .iter()
-                .map(|arg| CString::new(arg.as_bytes()).unwrap())
-                .collect();
-
-            let _ = nix::unistd::execv(&path_c, &args_c);
-
-            glib::ControlFlow::Break
-        });
     });
 
     app.run();
+}
+
+fn restart() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+
+    let exe = std::env::current_exe()?;
+    let path = CString::new(exe.as_os_str().as_bytes())?;
+    let args = std::env::args_os()
+        .map(|arg| CString::new(arg.as_bytes()))
+        .collect::<Result<Vec<_>, _>>()?;
+    nix::unistd::execv(&path, &args)?;
+    Ok(())
 }
