@@ -30,10 +30,13 @@ pub fn init(container: &gtk4::Box) {
     module_box.append(&btn);
 
     let popover = Popover::builder()
-        .css_classes(vec!["standard-popover".to_string()])
-        .position(gtk4::PositionType::Bottom)
+        .css_classes(vec![
+            "standard-popover".to_string(),
+            "network-popover".to_string(),
+        ])
+        .position(gtk4::PositionType::Top)
         .autohide(false)
-        .has_arrow(true)
+        .has_arrow(false)
         .build();
     popover.set_parent(&btn);
 
@@ -129,13 +132,13 @@ pub fn init(container: &gtk4::Box) {
 
             if popover_clone.is_visible() {
                 p_title.set_markup(&format!(
-                    "<b>{} @ {}</b>",
-                    info.ssid.as_deref().unwrap_or("Internet"),
+                    "{} · {}",
+                    glib::markup_escape_text(info.ssid.as_deref().unwrap_or("Internet")),
                     info.conn_type
                 ));
-                p_ip.set_text(&format!("IP: {}", info.ip_cidr));
+                p_ip.set_text(&info.ip_cidr);
                 p_stats.set_text(&format!(
-                    "Down: {:>5}bps   Up: {:>5}bps",
+                    "↓ {:>5}bps   ↑ {:>5}bps",
                     format_speed(info.down_speed),
                     format_speed(info.up_speed)
                 ));
@@ -368,7 +371,7 @@ fn is_virtual_interface(iface: &str) -> bool {
 
 fn format_speed(bits: u64) -> String {
     if bits < 1000 {
-        format!("{}b", bits)
+        format!("{}", bits)
     } else if bits < 1_000_000 {
         format!("{:.1}K", bits as f64 / 1000.0)
     } else {

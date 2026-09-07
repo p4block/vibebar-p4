@@ -488,7 +488,7 @@ fn setup_button_signals(btn: &Button, id: &str, backend: &Arc<TrayBackend>) {
                 .css_classes(vec!["standard-popover".to_string()])
                 .position(gtk4::PositionType::Top)
                 .autohide(true)
-                .has_arrow(true)
+                .has_arrow(false)
                 .build();
             popover.set_parent(&btn_right);
 
@@ -592,6 +592,7 @@ fn create_menu_vbox(
                 let sub_pop = Popover::builder()
                     .css_classes(vec!["standard-popover".to_string()])
                     .position(gtk4::PositionType::Right)
+                    .has_arrow(false)
                     .autohide(true)
                     .build();
                 sub_pop.set_parent(&btn_sub);

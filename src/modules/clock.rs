@@ -16,10 +16,13 @@ pub fn init(container: &gtk4::Box) {
 
     // 2. Setup the Popover
     let popover = Popover::builder()
-        .css_classes(vec!["standard-popover".to_string()])
+        .css_classes(vec![
+            "standard-popover".to_string(),
+            "calendar-popover".to_string(),
+        ])
         .position(PositionType::Top)
         .autohide(false)
-        .has_arrow(true)
+        .has_arrow(false)
         .build();
 
     // Set the button as the parent of the popover
@@ -80,7 +83,7 @@ fn get_calendar_markup() -> String {
     let now = Local::now();
     let year = now.year();
 
-    let mut full_markup = String::from("<tt><small>");
+    let mut full_markup = String::from("<tt>");
 
     for row in 0..4 {
         let mut lines = vec![String::new(); 9];
@@ -92,7 +95,7 @@ fn get_calendar_markup() -> String {
 
             lines[0].push_str(&format!("{:^20}  ", month_name));
 
-            lines[1].push_str("<span color='#ffcc66'>Mo Tu We Th Fr Sa Su</span>  ");
+            lines[1].push_str("<span color='#707070'>Mo Tu We Th Fr Sa Su</span>  ");
 
             let weekday = month_date.weekday().num_days_from_monday();
             let days_in_month = get_days_in_month(year, month);
@@ -106,7 +109,7 @@ fn get_calendar_markup() -> String {
                     } else {
                         let day_str = if month == now.month() && current_day == now.day() {
                             format!(
-                                "<span color='#ff6699'><b><u>{:2}</u></b></span> ",
+                                "<span background='#dedede' color='#101010'>{:2}</span> ",
                                 current_day
                             )
                         } else {
@@ -129,7 +132,7 @@ fn get_calendar_markup() -> String {
         full_markup.push('\n');
     }
 
-    full_markup.push_str("</small></tt>");
+    full_markup.push_str("</tt>");
     full_markup
 }
 
