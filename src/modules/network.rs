@@ -176,7 +176,7 @@ pub fn init(container: &gtk4::Box) {
 
                 for line in route_content.lines().skip(1) {
                     let parts: Vec<&str> = line.split_whitespace().collect();
-                    if parts.len() > 6 && (parts[1] == "00000000" || parts[2] == "00000000") {
+                    if is_default_route(&parts) {
                         let iface = parts[0].to_string();
                         if is_virtual_interface(&iface) {
                             continue;
@@ -195,6 +195,8 @@ pub fn init(container: &gtk4::Box) {
                         last_rx = 0;
                         last_tx = 0;
                         last_iface = iface.clone();
+                        current_ip = "0.0.0.0/0".to_string();
+                        current_ssid = None;
                         // Force info update on change
                         last_external_check = 0;
                     }
@@ -210,8 +212,13 @@ pub fn init(container: &gtk4::Box) {
                         "Ethernet".to_string()
                     };
 
+                    if last_external_check == 0 {
+                        current_ip = "0.0.0.0/0".to_string();
+                        current_ssid = None;
+                    }
+
                     if is_wifi && last_external_check == 0 {
-                        if let Ok(output) = Command::new("iwgetid").arg("-r").output() {
+                        if let Ok(output) = Command::new("iwgetid").arg(&iface).arg("-r").output() {
                             let s = String::from_utf8_lossy(&output.stdout).trim().to_string();
                             current_ssid = if !s.is_empty() { Some(s) } else { None };
                         }
@@ -273,6 +280,7 @@ pub fn init(container: &gtk4::Box) {
                     last_iface.clear();
                     current_ip = "0.0.0.0/0".to_string();
                     current_ssid = None;
+                    info.ip_cidr = current_ip.clone();
                 }
             }
 
@@ -298,9 +306,11 @@ pub fn init(container: &gtk4::Box) {
                 )
             };
 
-            let _ = tx.send((display_text, info));
+            if tx.send((display_text, info)).is_err() {
+                break;
+            }
 
-            last_external_check = (last_external_check + 1) % 60; // Check SSID/IP every 120s
+            last_external_check = (last_external_check + 1) % 60; // Check SSID/IP every 60 ticks
             std::thread::sleep(Duration::from_secs(1));
         }
     });
@@ -363,5 +373,35 @@ fn format_speed(bits: u64) -> String {
         format!("{:.1}K", bits as f64 / 1000.0)
     } else {
         format!("{:.1}M", bits as f64 / 1_000_000.0)
+    }
+}
+
+// Only an up route with a zero destination and mask is a default route.
+// A zero gateway also occurs on ordinary directly connected subnet routes.
+fn is_default_route(parts: &[&str]) -> bool {
+    parts.len() > 7
+        && parts[1] == "00000000"
+        && parts[7] == "00000000"
+        && u32::from_str_radix(parts[3], 16).is_ok_and(|flags| flags & 1 != 0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn identifies_only_up_default_routes() {
+        for (line, expected) in [
+            ("eth0 00000000 0101A8C0 0003 0 0 100 00000000", true),
+            ("eth0 0001A8C0 00000000 0001 0 0 0 00FFFFFF", false),
+            ("eth0 00000000 0101A8C0 0002 0 0 100 00000000", false),
+            ("eth0 00000000 00000000 0001 0 0 100 00000000", true),
+            ("eth0 00000000", false),
+        ] {
+            assert_eq!(
+                is_default_route(&line.split_whitespace().collect::<Vec<_>>()),
+                expected
+            );
+        }
     }
 }
