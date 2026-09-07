@@ -1,8 +1,7 @@
 use crate::modules::ui;
 use crate::runtime;
-use gtk4::GestureClick;
 use gtk4::prelude::*;
-use std::process::Command as StdCommand;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::process::Command;
 
@@ -16,14 +15,25 @@ pub fn init(
     let button = ui::button(&format!("{} ...", prefix));
     container.append(&button);
 
+    let refresh = Arc::new(tokio::sync::Notify::new());
     if let Some(click_command) = click_command {
         let click_command = click_command.to_string();
-        let gesture = GestureClick::new();
-        gesture.set_button(1);
-        gesture.connect_pressed(move |_, _, _, _| {
-            let _ = spawn_command(&click_command);
+        let refresh = refresh.clone();
+        button.connect_clicked(move |_| {
+            let command = click_command.clone();
+            let refresh = refresh.clone();
+            runtime::handle().spawn(async move {
+                match spawn_command(&command) {
+                    Ok(mut child) => {
+                        if let Err(error) = child.wait().await {
+                            eprintln!("[scripts] click command failed: {error}");
+                        }
+                        refresh.notify_one();
+                    }
+                    Err(error) => eprintln!("[scripts] could not launch {command}: {error}"),
+                }
+            });
         });
-        button.add_controller(gesture);
     }
 
     let cmd_own = command.to_string();
@@ -54,7 +64,10 @@ pub fn init(
                 last_label = display_text;
             }
 
-            tokio::time::sleep(Duration::from_secs(interval_secs)).await;
+            tokio::select! {
+                _ = tokio::time::sleep(Duration::from_secs(interval_secs)) => {},
+                _ = refresh.notified() => {},
+            }
         }
     });
 }
@@ -83,15 +96,15 @@ async fn run_command(command: &str) -> Option<String> {
     Some(parse_display_text(&stdout))
 }
 
-fn spawn_command(command: &str) -> std::io::Result<std::process::Child> {
+fn spawn_command(command: &str) -> std::io::Result<tokio::process::Child> {
     if shell_required(command) {
-        StdCommand::new("sh").arg("-c").arg(command).spawn()
+        Command::new("sh").arg("-c").arg(command).spawn()
     } else {
         let mut parts = command.split_whitespace();
         let Some(program) = parts.next() else {
-            return StdCommand::new("true").spawn();
+            return Command::new("true").spawn();
         };
-        StdCommand::new(program).args(parts).spawn()
+        Command::new(program).args(parts).spawn()
     }
 }
 

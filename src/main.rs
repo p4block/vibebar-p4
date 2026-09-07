@@ -84,7 +84,13 @@ fn create_window(
     modules::workspaces::init(&center);
 
     modules::mpris::init(&right);
-    modules::scripts::init(&right, "checkupdates | wc -l", 3600, "", None);
+    modules::scripts::init(
+        &right,
+        "checkupdates | wc -l",
+        3600,
+        "",
+        Some("footclient -e paru"),
+    );
 
     modules::network::init(&right);
     modules::aqi::init(&right);
